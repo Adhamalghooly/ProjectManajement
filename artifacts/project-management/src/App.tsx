@@ -94,7 +94,141 @@ function ProjectManagementApp() {
   const filteredProjects = filterStatus === "الكل" ? projects : projects.filter(p => p.status === filterStatus);
 
   const handlePrint = () => {
-    window.print();
+    const printContent = `
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>تقرير المشاريع</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: white; color: #1f2937; direction: rtl; font-size: 13px; }
+    .header { background: linear-gradient(to left, #1d4ed8, #1e3a8a); color: white; padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 20px; font-weight: bold; }
+    .header p { font-size: 12px; color: #bfdbfe; margin-top: 2px; }
+    .header .date { font-size: 12px; color: #bfdbfe; text-align: left; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 24px; }
+    .stat-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+    .stat-icon { width: 40px; height: 40px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .stat-label { font-size: 11px; color: #6b7280; }
+    .stat-value { font-size: 22px; font-weight: bold; color: #111827; }
+    .budget-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 24px 16px; }
+    .section-title { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; }
+    .section { padding: 0 24px 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead tr { background: #1d4ed8; color: white; }
+    th { padding: 9px 10px; text-align: right; font-weight: 600; }
+    tbody tr:nth-child(even) { background: #f9fafb; }
+    tbody tr:nth-child(odd) { background: white; }
+    td { padding: 8px 10px; color: #374151; border-bottom: 1px solid #f3f4f6; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge-green { background: #dcfce7; color: #166534; }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+    .progress-bar { background: #e5e7eb; border-radius: 10px; height: 8px; width: 80px; display: inline-block; vertical-align: middle; overflow: hidden; }
+    .progress-fill { height: 8px; border-radius: 10px; display: block; }
+    .footer { text-align: center; color: #9ca3af; font-size: 11px; padding: 16px; border-top: 1px solid #e5e7eb; margin-top: 10px; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @page { margin: 10mm; size: A4 landscape; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>📁 نظام تحليل بيانات المشاريع</h1>
+      <p>لوحة التحكم والمتابعة</p>
+    </div>
+    <div class="date">تاريخ التقرير: ${new Date().toLocaleDateString("ar-SA")}</div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card" style="border-right: 4px solid #3b82f6;">
+      <div class="stat-icon">📁</div>
+      <div><div class="stat-label">إجمالي المشاريع</div><div class="stat-value">${projects.length}</div></div>
+    </div>
+    <div class="stat-card" style="border-right: 4px solid #22c55e;">
+      <div class="stat-icon">✅</div>
+      <div><div class="stat-label">مشاريع مكتملة</div><div class="stat-value">${completed}</div></div>
+    </div>
+    <div class="stat-card" style="border-right: 4px solid #ef4444;">
+      <div class="stat-icon">⚠️</div>
+      <div><div class="stat-label">مشاريع متأخرة</div><div class="stat-value">${delayed}</div></div>
+    </div>
+    <div class="stat-card" style="border-right: 4px solid #f59e0b;">
+      <div class="stat-icon">🕐</div>
+      <div><div class="stat-label">قيد التنفيذ</div><div class="stat-value">${projects.filter(p => p.status === "قيد التنفيذ").length}</div></div>
+    </div>
+  </div>
+
+  <div class="budget-grid">
+    <div class="stat-card" style="border-right: 4px solid #a855f7;">
+      <div class="stat-icon">💰</div>
+      <div><div class="stat-label">إجمالي الميزانية</div><div class="stat-value">${(totalBudget / 1000000).toFixed(2)} م ر.س</div></div>
+    </div>
+    <div class="stat-card" style="border-right: 4px solid #f97316;">
+      <div class="stat-icon">📈</div>
+      <div><div class="stat-label">إجمالي المصروف</div><div class="stat-value">${(totalSpent / 1000000).toFixed(2)} م ر.س</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">تفاصيل المشاريع</div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>اسم المشروع</th>
+          <th>الحالة</th>
+          <th>الإنجاز</th>
+          <th>الميزانية (ر.س)</th>
+          <th>المصروف (ر.س)</th>
+          <th>تاريخ البدء</th>
+          <th>تاريخ الانتهاء</th>
+          <th>المدير</th>
+          <th>القسم</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${projects.map((p, i) => {
+          const badgeClass = p.status === "مكتمل" ? "badge-green" : p.status === "متأخر" ? "badge-red" : "badge-blue";
+          const fillColor = p.status === "مكتمل" ? "#22c55e" : p.status === "متأخر" ? "#ef4444" : "#3b82f6";
+          return `<tr>
+            <td>${p.id}</td>
+            <td><strong>${p.name}</strong></td>
+            <td><span class="badge ${badgeClass}">${p.status}</span></td>
+            <td>
+              <span class="progress-bar"><span class="progress-fill" style="width:${p.progress}%;background:${fillColor};"></span></span>
+              <span style="font-size:11px;margin-right:6px;">${p.progress}%</span>
+            </td>
+            <td>${p.budget.toLocaleString()}</td>
+            <td>${p.spent.toLocaleString()}</td>
+            <td>${p.startDate}</td>
+            <td>${p.endDate}</td>
+            <td>${p.manager}</td>
+            <td>${p.department}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    تم إنشاء هذا التقرير من نظام تحليل بيانات المشاريع — ${new Date().toLocaleDateString("ar-SA")}
+  </div>
+
+  <script>
+    window.onload = function() { window.print(); }
+  </script>
+</body>
+</html>`;
+
+    const printWindow = window.open("", "_blank", "width=1100,height=700");
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+    }
   };
 
   const handleExportExcel = () => {
