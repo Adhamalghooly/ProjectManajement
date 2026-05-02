@@ -18722,6 +18722,182 @@ window.printMemo = printMemo;
 </div>
 
 <script>
+// ================================================================
+// MOBILE / WEBVIEW COMPATIBILITY PATCH
+// Fixes: print popup windows + XLSX download + PDF download
+// Works transparently in both browser and Android WebView (APK)
+// ================================================================
+(function () {
+    'use strict';
+
+    /* ── A. Print window patch ───────────────────────────────────
+       All print helpers do:
+         const pw = window.open('', '_blank');
+         pw.document.write(html);
+         pw.document.close();
+         setTimeout(() => pw.print(), N);
+       In WebView window.open returns null → crash.
+       We return a fake window whose .print() shows an in-app overlay.
+    ─────────────────────────────────────────────────────────────── */
+    const _origOpen = window.open.bind(window);
+    window.open = function (url, target, features) {
+        const blank = !url || url === '' || url === 'about:blank';
+        if (blank) return _makeFakeWindow();
+        return _origOpen(url, target, features);
+    };
+
+    function _makeFakeWindow() {
+        let _buf = '';
+        const fakeDoc = {
+            write(s)  { _buf += s; },
+            writeln(s){ _buf += s + '\n'; },
+            close()   { /* noop – we render on .print() */ },
+            get readyState() { return 'complete'; }
+        };
+        return {
+            document: fakeDoc,
+            location: { href: 'about:blank' },
+            closed: false,
+            focus() {},
+            close() { document.getElementById('__pm_print_overlay')?.remove(); },
+            print() { _showPrintOverlay(_buf); }
+        };
+    }
+
+    function _showPrintOverlay(html) {
+        document.getElementById('__pm_print_overlay')?.remove();
+
+        const ov = document.createElement('div');
+        ov.id = '__pm_print_overlay';
+        ov.style.cssText =
+            'position:fixed;inset:0;z-index:2147483647;background:#fff;' +
+            'display:flex;flex-direction:column;font-family:Cairo,sans-serif;';
+
+        ov.innerHTML =
+            '<div id="__pm_tb" style="background:#1e3a8a;color:#fff;padding:12px 16px;' +
+            'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;">' +
+              '<span style="font-size:15px;font-weight:700;direction:rtl;">🖨️ معاينة التقرير</span>' +
+              '<div style="display:flex;gap:8px;">' +
+                '<button id="__pm_print_btn" style="background:#22c55e;border:0;color:#fff;' +
+                'padding:9px 18px;border-radius:7px;font-family:Cairo;font-size:13px;' +
+                'cursor:pointer;font-weight:700;">🖨️ طباعة / مشاركة</button>' +
+                '<button id="__pm_close_btn" style="background:#ef4444;border:0;color:#fff;' +
+                'padding:9px 14px;border-radius:7px;font-size:15px;cursor:pointer;font-weight:700;">✕</button>' +
+              '</div>' +
+            '</div>' +
+            '<iframe id="__pm_frame" style="flex:1;border:0;width:100%;background:#fff;"></iframe>';
+
+        document.body.appendChild(ov);
+
+        const frame = ov.querySelector('#__pm_frame');
+        try {
+            frame.contentDocument.open();
+            frame.contentDocument.write(html);
+            frame.contentDocument.close();
+        } catch (e) {
+            frame.srcdoc = html;
+        }
+
+        ov.querySelector('#__pm_close_btn').onclick = () => ov.remove();
+
+        ov.querySelector('#__pm_print_btn').onclick = async function () {
+            // Web Share API → works on Android Chrome / WebView
+            if (typeof navigator.share === 'function') {
+                try {
+                    const blob = new Blob([html], { type: 'text/html' });
+                    const file = new File([blob], 'تقرير.html', { type: 'text/html' });
+                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                            files: [file],
+                            title: 'تقرير – نظام تحليل بيانات المشاريع'
+                        });
+                        return;
+                    }
+                } catch (e) { /* cancelled or not supported */ }
+            }
+            // Fallback: print the iframe (works in desktop browser)
+            try { frame.contentWindow.print(); } catch (e) { window.print(); }
+        };
+    }
+
+    /* ── B. XLSX / XLSXStyle writeFile patch ────────────────────
+       Replaces the internal download with a reliable Blob → <a> approach.
+       Applied immediately AND after DOMContentLoaded.
+    ─────────────────────────────────────────────────────────────── */
+    function _patchXLSX(lib, name) {
+        if (!lib || lib.__pm_patched) return;
+        lib.__pm_patched = true;
+        lib.writeFile = function (wb, filename, opts) {
+            try {
+                const data = lib.write(wb, Object.assign({ bookType: 'xlsx', type: 'array' }, opts || {}));
+                const blob = new Blob([data], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                });
+                _blobDownload(blob, filename);
+            } catch (e) {
+                console.warn(name + ' writeFile (array) failed, trying base64:', e);
+                try {
+                    const b64 = lib.write(wb, Object.assign({ bookType: 'xlsx', type: 'base64' }, opts || {}));
+                    const a = document.createElement('a');
+                    a.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + b64;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => a.remove(), 1000);
+                } catch (e2) {
+                    console.error(name + ' writeFile completely failed:', e2);
+                    typeof showNotification === 'function' && showNotification('تعذّر تصدير الملف', 'error');
+                }
+            }
+        };
+    }
+
+    /* ── C. jsPDF save patch ─────────────────────────────────────
+       pdf.save(filename) internally does the same blob trick.
+       Patch the prototype so every instance benefits.
+    ─────────────────────────────────────────────────────────────── */
+    function _patchJsPDF() {
+        const jspdf = window.jspdf;
+        if (!jspdf || !jspdf.jsPDF || jspdf.jsPDF.prototype.__pm_patched) return;
+        jspdf.jsPDF.prototype.__pm_patched = true;
+        const _origSave = jspdf.jsPDF.prototype.save;
+        jspdf.jsPDF.prototype.save = function (filename, options) {
+            try {
+                const blob = this.output('blob');
+                _blobDownload(blob, filename || 'report.pdf');
+            } catch (e) {
+                console.warn('jsPDF save fallback:', e);
+                try { _origSave.call(this, filename, options); } catch (e2) { /* ignore */ }
+            }
+        };
+    }
+
+    function _blobDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href        = url;
+        a.download    = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 3000);
+    }
+
+    // Apply patches now (CDN libs already loaded) and again on DOMContentLoaded
+    function _applyAllPatches() {
+        if (typeof XLSX      !== 'undefined') _patchXLSX(XLSX,      'XLSX');
+        if (typeof XLSXStyle !== 'undefined') _patchXLSX(XLSXStyle, 'XLSXStyle');
+        _patchJsPDF();
+    }
+
+    _applyAllPatches();
+    document.addEventListener('DOMContentLoaded', _applyAllPatches);
+
+})();
+// ================================================================
+// END MOBILE / WEBVIEW COMPATIBILITY PATCH
+// ================================================================
+
 function issueOfficialMemo() {
     const branchFilter = document.getElementById('global-branch-filter')?.value || 'جميع الفروع';
     const dateSelect = document.getElementById('nearing-date');
