@@ -1,0 +1,1986 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام تحليل بيانات المشاريع</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <style>
+      /* ═══ Stream-based Scheduling extras ═══ */
+      #geo-map { height: 420px; width: 100%; border-radius: 12px; border: 1px solid var(--gray-light); }
+      #stream-engine-results .stream-card {
+        border: 1px solid var(--gray-light); border-radius: 10px; padding: 12px 16px;
+        margin-bottom: 12px; background: var(--bg-secondary);
+      }
+      #stream-engine-results .stream-card h4 { margin: 0 0 8px 0; color: var(--secondary); font-size: 1rem; }
+      .stream-badge {
+        display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.72rem;
+        font-weight:700; background:rgba(142,68,173,0.12); color:#8e44ad; border:1px solid rgba(142,68,173,0.3);
+      }
+      .mode-badge-equipment { background:rgba(231,76,60,0.12); color:#c0392b; border:1px solid rgba(231,76,60,0.4); padding:2px 8px; border-radius:8px; font-size:0.72rem; font-weight:700; }
+      .mode-badge-labor { background:rgba(39,174,96,0.12); color:#27ae60; border:1px solid rgba(39,174,96,0.4); padding:2px 8px; border-radius:8px; font-size:0.72rem; font-weight:700; }
+      .engine-toggle { display:inline-flex; background:var(--bg-secondary); border:1px solid var(--gray-light); border-radius:10px; padding:4px; }
+      .engine-toggle button { padding:7px 16px; border:none; background:transparent; cursor:pointer; border-radius:7px; font-weight:700; font-size:0.86rem; color:var(--text-secondary); }
+      .engine-toggle button.active { background:var(--primary, #2c3e50); color:#fff; }
+    </style>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+    <div id="app">
+        <header class="main-header">
+            <div class="header-content container">
+                <div class="logo-section">
+                    <h1>نظام تحليل بيانات المشاريع</h1>
+                </div>
+                <div class="header-actions">
+                    <div class="date-info" id="current-date"></div>
+                    <button class="theme-toggle" id="theme-toggle" title="تبديل الوضع">
+                        <span class="theme-icon">🌙</span>
+                    </button>
+                    <button class="hamburger-btn" id="hamburger-btn" title="القائمة">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+        <nav class="sidebar-nav" id="sidebar-nav">
+            <div class="sidebar-header">
+                <h3>القائمة الرئيسية</h3>
+                <button class="sidebar-close" id="sidebar-close">✕</button>
+            </div>
+            <div class="sidebar-menu">
+                <button class="sidebar-btn active" data-section="data-management">
+                    <span class="nav-icon">  📁  إداره البيانات</span>
+                    <span class="nav-text">إدارة البيانات</span>
+                </button>
+                <button class="sidebar-btn" data-section="reports">
+                    <span class="nav-icon">📊  التقارير</span>
+                    <span class="nav-text">التقارير</span>
+                </button>
+                <button class="sidebar-btn" data-section="kpi-dashboard">
+                    <span class="nav-icon">📈  لوحة المؤشرات</span>
+                    <span class="nav-text">لوحة المؤشرات</span>
+                </button>
+                <button class="sidebar-btn" data-section="visual-analytics">
+                    <span class="nav-icon">📉  التحليلات المرئية</span>
+                    <span class="nav-text">التحليلات المرئية</span>
+                </button>
+                <button class="sidebar-btn" data-section="performance-analysis">
+                    <span class="nav-icon">🔍  تحليل الأداء</span>
+                    <span class="nav-text">تحليل الأداء</span>
+                </button>
+                <button class="sidebar-btn" data-section="project-details">
+                    <span class="nav-icon">📋  تفاصيل المشروع</span>
+                    <span class="nav-text">تفاصيل المشروع</span>
+                </button>
+                <button class="sidebar-btn" data-section="evm-analytics">
+                    <span class="nav-icon">📊 مؤشرات EVM</span>
+                    <span class="nav-text">مؤشرات EVM</span>
+                </button>
+                <button class="sidebar-btn" data-section="stats-center">
+                    <span class="nav-icon">📊 مركز الإحصائيات</span>
+                    <span class="nav-text">مركز الإحصائيات</span>
+                </button>
+                <button class="sidebar-btn" data-section="critical-path">
+                    <span class="nav-icon">⏱️ الزمن الحرج</span>
+                    <span class="nav-text">الزمن الحرج</span>
+                </button>
+                
+                  <button class="sidebar-btn" data-section="branch-indicators">
+                      <span class="nav-icon">📊 مؤشرات الأداء الخاصة</span>
+                      <span class="nav-text">مؤشرات الأداء الخاصة</span>
+                  </button>
+                  <button class="sidebar-btn" data-section="timeline-plan">
+                    <span class="nav-icon">🗓️ الخطة الزمنية</span>
+                    <span class="nav-text">الخطة الزمنية</span>
+                </button>
+                                <button class="sidebar-btn" data-section="geo-management">
+                    <span class="nav-icon">🗺️ إدارة المواقع</span>
+                    <span class="nav-text">إدارة المواقع</span>
+                </button>
+                <button class="sidebar-btn" data-section="scheduling-mode">
+                    <span class="nav-icon">⚙️ وضع الجدولة</span>
+                    <span class="nav-text">وضع الجدولة</span>
+                </button>
+                <button class="sidebar-btn" data-section="auto-scheduling">
+                    <span class="nav-icon">🤖 الجدولة التلقائية</span>
+                    <span class="nav-text">الجدولة التلقائية (الكلاسيكي)</span>
+                </button>
+                <button class="sidebar-btn" data-section="stream-scheduling">
+                    <span class="nav-icon">🌊 جدولة المسارات</span>
+                    <span class="nav-text">جدولة المسارات (Streams)</span>
+                </button>
+                <button class="sidebar-btn" data-section="unified-recommendations">
+                    <span class="nav-icon">🎯 التوصيات الذكية الموحدة</span>
+                    <span class="nav-text">التوصيات الذكية الموحدة</span>
+                </button>
+            </div>
+        </nav>
+
+        <div class="developer-credit">
+            <span>تصميم وتطوير: م. أدهم الغولي</span>
+        </div>
+
+        <main class="main-content container">
+        <section id="data-management" class="section active">
+                <div class="section-header">
+                    <h2>📁 إدارة البيانات</h2>
+                    <p>تحميل وإدارة ملفات المشاريع</p>
+                </div>
+                
+                <div class="upload-grid">
+                    <div class="upload-card">
+                        <div class="upload-icon">📤</div>
+                        <h3>تحميل ملف Excel</h3>
+                        <p>اختر ملف Excel يحتوي على بيانات المشاريع</p>
+                        <div class="upload-area" id="upload-area">
+                            <input type="file" id="excel-file" accept=".xlsx,.xls" hidden>
+                            <label for="excel-file" class="upload-label">
+                                <span class="upload-text">اسحب الملف هنا أو اضغط للاختيار</span>
+                            </label>
+                        </div>
+                        <div class="file-info" id="file-info" style="display: none;">
+                            <span class="file-name"></span>
+                            <button class="btn-icon" id="clear-file">✕</button>
+                        </div>
+                        <div class="sheet-selector" id="sheet-selector" style="display: none;">
+                            <label>اختر الورقة:</label>
+                            <select id="sheet-select"></select>
+                        </div>
+                    </div>
+
+                    <div class="upload-card">
+                        <div class="upload-icon">📅</div>
+                        <h3>تحديد تاريخ البيانات</h3>
+                        <p>حدد تاريخ هذه البيانات للمتابعة الزمنية</p>
+                        <div class="date-input-group">
+                            <label for="data-date">تاريخ البيانات:</label>
+                            <input type="date" id="data-date">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn btn-primary" id="add-to-timeline" disabled>
+                                إضافة للسجل الزمني
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="data-status-card">
+                    <h3>📊 حالة البيانات</h3>
+                    <div class="stats-grid" id="data-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">عدد نقاط البيانات:</span>
+                            <span class="stat-value" id="timeline-count">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">إجمالي المشاريع:</span>
+                            <span class="stat-value" id="total-projects">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">آخر تحديث:</span>
+                            <span class="stat-value" id="last-update">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-section">
+                    <h3>📅 السجل الزمني</h3>
+                    <div class="timeline-view">
+                        <table id="timeline-table">
+                            <thead>
+                                <tr>
+                                    <th>التاريخ</th>
+                                    <th>عدد المشاريع</th>
+                                    <th>تاريخ الإضافة</th>
+                                    <th>إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="backup-section">
+                    <h4>💾 النسخ الاحتياطي للبيانات المهمة</h4>
+                    <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">احفظ أسباب عدم البدء والحالات الفعلية بنسخة آمنة</p>
+                    <div class="button-group">
+                        <button class="btn btn-success" onclick="exportBackup()">💾 إدارة النسخ الاحتياطية</button>
+                        <button class="btn btn-warning" id="import-backup">استيراد نسخة احتياطية قديمة</button>
+                        <input type="file" id="backup-file" accept=".json" hidden>
+                        <button class="btn btn-danger" id="clear-data">مسح جميع البيانات</button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="reports" class="section">
+                <div class="section-header">
+                    <h2>📊 نظام التقارير</h2>
+                    <p>تقارير تحليلية لمشاريعك</p>
+                </div>
+                
+                <div class="filter-bar">
+                    <label style="margin-left: 10px;">تصفية التقارير:</label>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label for="global-branch-filter" style="font-size: 0.85rem; white-space: nowrap;">الجهة المنفذة:</label>
+                            <select id="global-branch-filter" style="min-width: 150px;" onchange="Reports.updateBranchFilters(this.value)">
+                                <option value="">جميع الفروع</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label for="global-type-filter" style="font-size: 0.85rem; white-space: nowrap;">نوع المشروع:</label>
+                            <select id="global-type-filter" style="min-width: 150px;">
+                                <option value="">جميع الأنواع</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button class="btn btn-info" onclick="printWithTitle()" style="padding: 8px 15px; font-size: 0.85rem;">🖨️ طباعة الشاشة</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="reports-grid">
+                    <div class="report-section">
+    <h4>📊 تقييم أداء الفروع</h4>
+                        <div class="report-controls">
+                            <div class="control-group">
+                                <label>التاريخ الحالي:</label>
+                                <select id="branch-eval-current-date" class="date-select"></select>
+                            </div>
+                            <div class="control-group">
+                                <label>التاريخ السابق (للمشاريع النشطة):</label>
+                                <select id="branch-eval-prev-date" class="date-select">
+                                    <option value="">-- اختياري --</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary" onclick="Reports.generateBranchEvaluationReport()">
+                                📊 إنشاء التقرير
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">📊</div>
+                        <h3>ملخص تقدم المشاريع (مصفوفة)</h3>
+                        <p>عدد المشاريع المتقدمة حسب النوع والجهة المنفذة</p>
+                        <div class="date-selector">
+                            <label>التاريخ الحالي:</label>
+                            <select id="matrix-current-date"></select>
+                            <label>التاريخ السابق:</label>
+                            <select id="matrix-prev-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-info" onclick="Reports.generateProgressSummaryMatrixReport()">عرض المصفوفة</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">📈</div>
+                        <h3>المشاريع ذات التقدم</h3>
+                        <p>المشاريع التي حصل فيها تقدم في العمل</p>
+                        <div class="date-selector">
+                            <label>التاريخ الحالي:</label>
+                            <select id="progress-current-date"></select>
+                            <label>التاريخ السابق:</label>
+                            <select id="progress-prev-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary" onclick="Reports.generateProgressReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportProgressReportToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">✅</div>
+                        <h3>المشاريع المنجزة</h3>
+                        <p>المشاريع التي تحولت من جاري إلى منجز</p>
+                        <div class="date-selector">
+                            <label>التاريخ الحالي:</label>
+                            <select id="completed-current-date"></select>
+                            <label>التاريخ السابق:</label>
+                            <select id="completed-prev-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-success" onclick="Reports.generateCompletedProjectsReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportCompletedProjectsToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">🚀</div>
+                        <h3>المشاريع المنطلقة</h3>
+                        <p>المشاريع التي تحولت من لم يبداء إلى جاري</p>
+                        <div class="date-selector">
+                            <label>التاريخ الحالي:</label>
+                            <select id="started-current-date"></select>
+                            <label>التاريخ السابق:</label>
+                            <select id="started-prev-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-warning" onclick="Reports.generateStartedProjectsReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportStartedProjectsToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">⏸️</div>
+                        <h3>المشاريع المتوقفة</h3>
+                        <p>المشاريع الجارية التي لم تتغير نسب الإنجاز</p>
+                        <div class="date-selector">
+                            <label>التاريخ الحالي:</label>
+                            <select id="stalled-current-date"></select>
+                            <label>عدد الأسابيع:</label>
+                            <input type="number" id="stalled-weeks" value="4" min="2">
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-danger" onclick="Reports.generateStalledProjectsReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportStalledProjectsToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card" style="border-right-color: #9b59b6;">
+                        <div class="report-icon">🔄</div>
+                        <h3>المشاريع الجارية فعلياً</h3>
+                        <p>المشاريع التي لا تزال تحتاج عمل فعلي (يستثني المشاريع الجاهزة للإنجاز)</p>
+                        <div class="filter-selector">
+                            <label>تصفية حسب الجهة:</label>
+                            <select id="actually-inprogress-branch-filter">
+                                <option value="">جميع الفروع</option>
+                            </select>
+                        </div>
+                        <div class="date-selector">
+                            <label>اختر التاريخ:</label>
+                            <select id="actually-inprogress-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary" style="background: #9b59b6;" onclick="Reports.generateActuallyInProgressReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportActuallyInProgressToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">🎯</div>
+                        <h3>المشاريع قرب الإنجاز</h3>
+                        <p>المشاريع الجارية بنسبة إنجاز 90% وأكثر</p>
+                        <div class="date-selector">
+                            <label>اختر التاريخ:</label>
+                            <select id="nearing-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-info" onclick="Reports.generateNearingCompletionReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportNearingCompletionToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+
+                    <div class="report-card">
+                        <div class="report-icon">⏰</div>
+                        <h3>المشاريع المتأخرة</h3>
+                        <p>المشاريع التي لم تصل إلى نسبة الإنجاز المتوقعة</p>
+                        <div class="date-selector">
+                            <label>التاريخ الحالي:</label>
+                            <select id="delayed-current-date"></select>
+                            <label>عدد الأيام المتوقعة:</label>
+                            <input type="number" id="delayed-days" value="90" min="1">
+                            <label>النسبة المتوقعة (%):</label>
+                            <input type="number" id="delayed-expected" value="50" min="0" max="100">
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-danger" onclick="Reports.generateDelayedProjectsReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportDelayedProjectsToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">⏱️</div>
+                        <h3>زمن إنجاز المشاريع</h3>
+                        <p>حساب المدة من بداية المشروع حتى إنجازه</p>
+                        <div class="filter-selector">
+                            <label>تصفية حسب الجهة:</label>
+                            <select id="duration-branch-filter">
+                                <option value="">جميع الفروع</option>
+                            </select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary" onclick="Reports.generateProjectDurationReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportProjectDurationToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">🕐</div>
+                        <h3>زمن الإنجاز (90% إلى منجز)</h3>
+                        <p>حساب المدة من وصول المشروع لـ90% حتى إنجازه</p>
+                        <div class="filter-selector">
+                            <label>تصفية حسب الجهة:</label>
+                            <select id="completion-time-branch-filter">
+                                <option value="">جميع الفروع</option>
+                            </select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary" onclick="Reports.generateCompletionTimeReport()">عرض التقرير</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">📊</div>
+                        <h3>إحصائيات حسب النوع</h3>
+                        <p>تقرير إحصائي شامل للمشاريع حسب النوع</p>
+                        <div class="filter-selector">
+                            <label>تصفية حسب الجهة:</label>
+                            <select id="type-report-branch-filter">
+                                <option value="">جميع الفروع</option>
+                            </select>
+                        </div>
+                        <div class="date-selector">
+                            <label>اختر التاريخ:</label>
+                            <select id="type-report-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary" onclick="Reports.generateTypeStatisticsReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportTypeStatisticsToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card" style="border-right-color: #e74c3c;">
+                        <div class="report-icon">⚠️</div>
+                        <h3>مشاريع ينبغي الاهتمام بها</h3>
+                        <p>مشاريع لم تبدأ منذ فترة، أو منجزة لم تقفل، أو قرب إنجاز متأخرة</p>
+                        <div class="filter-selector">
+                            <label>تصفية حسب المعيار:</label>
+                            <select id="attention-criteria-filter">
+                                <option value="all">جميع المعايير</option>
+                                <option value="not-started-delayed">لم تبدأ (متأخرة)</option>
+                                <option value="completed-not-closed">منجز (لم يقفل > 15 يوم)</option>
+                                <option value="nearing-delayed">قرب الإنجاز (متأخرة > 10 أيام)</option>
+                            </select>
+                        </div>
+                        <div class="date-selector">
+                            <label>اختر التاريخ:</label>
+                            <select id="attention-report-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-danger" onclick="Reports.generateProjectsToWatchReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportProjectsToWatchToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <div class="report-icon">🚫</div>
+                        <h3>المشاريع التي لم تبدأ</h3>
+                        <p>المشاريع التي لم تبدأ مرتبة حسب تاريخ التكليف (الأقدم أولاً)</p>
+                        <div class="date-selector">
+                            <label>اختر التاريخ:</label>
+                            <select id="notstarted-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-danger" onclick="Reports.generateNotStartedProjectsReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportNotStartedProjectsToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card" style="border-right-color: #9b59b6;">
+                        <div class="report-icon">📅</div>
+                        <h3>تقرير المواعيد النهائية</h3>
+                        <p>عرض المشاريع الجارية وتقدير الفترة المتبقية (مرتبة بالأقدم)</p>
+                        <div class="filter-selector">
+                            <label>تصفية حسب الجهة:</label>
+                            <select id="deadline-report-branch-filter">
+                                <option value="">جميع الفروع</option>
+                            </select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary" style="background: #9b59b6;" onclick="Reports.generateDeadlinesReport()">عرض التقرير</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card" style="border-right-color: #2c3e50;">
+                        <div class="report-icon">📉</div>
+                        <h3>مركز الإحصائيات المجدول</h3>
+                        <p>تقرير تفصيلي موزع حسب الجهات المنفذة والمعايير الزمنية</p>
+                        <div class="date-selector">
+                            <label>اختر التاريخ:</label>
+                            <select id="scheduled-stats-date"></select>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary" style="background: #2c3e50;" onclick="Reports.generateScheduledStatsReport()">عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportScheduledStatsToExcel()">تصدير Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="report-card" style="border-right-color: #e67e22;">
+                        <div class="report-icon">💰</div>
+                        <h3>مقارنة الفروع حسب تكلفة الأعمال السنوية</h3>
+                        <p>مقارنة بين الفروع حسب تكلفة الأعمال المنفذة خلال شهر محدد</p>
+                        <div class="filter-selector">
+                            <label>اختر الشهر:</label>
+                            <select id="quarterly-quarter">
+                                <option value="">-- اختر --</option>
+                                <option value="M01">يناير</option>
+                                <option value="M02">فبراير</option>
+                                <option value="M03">مارس</option>
+                                <option value="M04">أبريل</option>
+                                <option value="M05">مايو</option>
+                                <option value="M06">يونيو</option>
+                                <option value="M07">يوليو</option>
+                                <option value="M08">أغسطس</option>
+                                <option value="M09">سبتمبر</option>
+                                <option value="M10">أكتوبر</option>
+                                <option value="M11">نوفمبر</option>
+                                <option value="M12">ديسمبر</option>
+                                <option value="FULL">السنة كاملة</option>
+                            </select>
+                        </div>
+                        <div class="filter-selector">
+                            <label>السنة:</label>
+                            <input type="number" id="quarterly-year" value="2024" min="2020" max="2030">
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary" style="background: #e67e22;" onclick="Reports.generateQuarterlyBranchCostComparison()">📊 عرض التقرير</button>
+                            <button class="btn btn-primary" style="background: #8e44ad;" onclick="Reports.openMultiMonthCostModal()">📋 مقارنة الأشهر</button>
+                            <button class="btn btn-success" onclick="Reports.exportQuarterlyCostToExcel()">📥 تصدير Excel</button>
+                        </div>
+
+                        <!-- لوحة اختيار الأشهر المتعددة -->
+                        <div id="multi-month-panel" style="display:none; margin-top:15px; border-top:2px dashed #ddd; padding-top:15px;">
+                            <p style="font-weight:700; color:#8e44ad; margin-bottom:10px; font-size:0.95rem;">📅 اختر الأشهر المراد مقارنتها:</p>
+                            <div style="display:flex; flex-wrap:wrap; gap:8px 16px; margin-bottom:14px;">
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M01"> يناير</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M02"> فبراير</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M03"> مارس</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M04"> أبريل</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M05"> مايو</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M06"> يونيو</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M07"> يوليو</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M08"> أغسطس</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M09"> سبتمبر</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M10"> أكتوبر</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M11"> نوفمبر</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="M12"> ديسمبر</label>
+                                <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.9rem;"><input type="checkbox" class="multi-month-cb" value="FULL"> السنة كاملة</label>
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <button class="btn btn-primary" style="background:#8e44ad;" onclick="Reports.generateMultiMonthComparison()">📊 عرض مقارنة الأشهر</button>
+                                <button class="btn" style="background:#eee; color:#333;" onclick="document.querySelectorAll('.multi-month-cb').forEach(cb=>cb.checked=true)">تحديد الكل</button>
+                                <button class="btn" style="background:#eee; color:#333;" onclick="document.querySelectorAll('.multi-month-cb').forEach(cb=>cb.checked=false)">إلغاء الكل</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="report-card" style="border-right-color: #16a085;">
+                        <div class="report-icon">⏱️</div>
+                        <h3>نسبة البدء في الموعد (حسب السنة)</h3>
+                        <p>نسبة المشاريع التي تحولت من "لم يبدأ" إلى "جاري" في تاريخ البدء التخطيطي (PlanFrom) أو قبله — لكل سنة على حدة</p>
+                        <div class="card-actions">
+                            <button class="btn btn-primary" style="background: #16a085;" onclick="Reports.generateOnTimeStartReport()">📊 عرض التقرير</button>
+                            <button class="btn btn-success" onclick="Reports.exportOnTimeStartReportToExcel()">📥 تصدير Excel</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="kpi-dashboard" class="section">
+                <div class="section-header">
+                    <h2>📈 لوحة مؤشرات الأداء</h2>
+                    <p>نظرة شاملة على أداء المشاريع</p>
+                </div>
+                
+                <div class="filter-bar">
+                    <label for="kpi-branch-filter">تصفية حسب الجهة المنفذة:</label>
+                    <select id="kpi-branch-filter">
+                        <option value="">جميع الفروع</option>
+                    </select>
+                </div>
+
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon">📊</div>
+                        <div class="kpi-value" id="kpi-avg-progress">0%</div>
+                        <div class="kpi-label">متوسط نسبة الإنجاز الكلي</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">⏸️</div>
+                        <div class="kpi-value" id="kpi-stalled-projects">0</div>
+                        <div class="kpi-label">المشاريع المتوقفة</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🎯</div>
+                        <div class="kpi-value" id="kpi-nearing-completion">0</div>
+                        <div class="kpi-label">المشاريع قرب الإنجاز</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🏆</div>
+                        <div class="kpi-value" id="kpi-top-projects">0</div>
+                        <div class="kpi-label">أفضل المشاريع أداءً</div>
+                    </div>
+                </div>
+
+                <div class="pdf-export-section" style="margin-bottom: 20px; text-align: center;">
+                    <button class="btn print-btn" onclick="PrintUtils.printKPIReport()">
+                        🖨️ طباعة التقرير الشامل
+                    </button>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="dashboard-card">
+                        <h3>📋 جدول المشاريع التفصيلي</h3>
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="KPI.generateProjectsTable()">عرض جدول المشاريع</button>
+                            <button class="btn btn-success" onclick="KPI.exportProjectsTableToExcel()">تصدير Excel</button>
+                            <button class="btn print-btn" onclick="PrintUtils.printProjectsTable()">🖨️ طباعة</button>
+                        </div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>🔝 أفضل المشاريع أداءً</h3>
+                        <div id="top-projects-list" class="stats-list"></div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3>🏷️ تصنيف المشاريع</h3>
+                        <div id="projects-classification" class="stats-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="visual-analytics" class="section">
+                <div class="section-header">
+                    <h2>📉 التحليلات المرئية</h2>
+                    <p>عرض بياني متقدم لبيانات المشاريع مع منحنى S-Curve التفاعلي</p>
+                </div>
+                
+                <div class="filter-bar">
+                    <label for="visual-branch-filter">تصفية حسب الجهة المنفذة:</label>
+                    <select id="visual-branch-filter">
+                        <option value="">جميع الفروع</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="Charts.refreshCharts()">تحديث الرسوم</button>
+                    <button class="btn print-btn" onclick="PrintUtils.printChart('scurveChart', 'منحنى التقدم S-Curve')">🖨️ طباعة</button>
+                </div>
+
+                <div class="chart-card full-width">
+                    <h3>📈 منحنى S-Curve المحسّن - المدني والفني والمخطط</h3>
+                    <p class="chart-description">مقارنة تفصيلية للإنجاز المدني والفني مع المنحنى المثالي S-Curve</p>
+                    <div class="scurve-controls">
+                        <label>رقم المشروع:</label>
+                        <input type="text" id="scurve-project-input" placeholder="أدخل رقم المشروع" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; width: 200px;">
+                        <button class="btn btn-primary" onclick="Charts.showProjectSCurve()">عرض المخطط</button>
+                        <button class="btn btn-secondary" onclick="Charts.showAllProjectsSCurve()">عرض الكل</button>
+                        <span class="scurve-hint">💡 أدخل رقم المشروع لعرض تفاصيله</span>
+                    </div>
+                    <div class="chart-wrapper-large">
+                        <canvas id="scurveChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card full-width">
+                    <h3>📊 مقارنة الفروع الموحدة</h3>
+                    <p class="chart-description" id="unified-chart-description">اختر نوع المقارنة من القائمة أدناه</p>
+                    <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+                        <label for="unified-comparison-type" style="font-weight: 600;">نوع المقارنة:</label>
+                        <select id="unified-comparison-type" onchange="Charts.updateUnifiedComparisonChart()" style="padding: 10px 15px; border: 1px solid var(--gray-light); border-radius: 8px; font-size: 0.95rem; min-width: 280px;">
+                            <option value="velocity">عدد المشاريع التي تحدث نسب إنجازها أسبوعياً</option>
+                            <option value="completed">عدد المشاريع المنجزة أسبوعياً</option>
+                            <option value="launched">عدد المشاريع المنطلقة أسبوعياً</option>
+                            <option value="financial-weekly">الإنجاز المالي الأسبوعي</option>
+                            <option value="financial-monthly">الإنجاز المالي الشهري</option>
+                            <option value="financial-quarterly">الإنجاز المالي الربعي</option>
+                            <option value="financial-yearly">الإنجاز المالي السنوي</option>
+                        </select>
+                        <button class="btn print-btn" onclick="PrintUtils.printChart('unifiedComparisonChart', document.getElementById('unified-chart-description').textContent)">🖨️ طباعة</button>
+                    </div>
+                    <div class="chart-wrapper-xlarge" style="min-height: 600px;">
+                        <canvas id="unifiedComparisonChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card full-width">
+                    <h3>🏢 مقارنة أداء الجهات المنفذة</h3>
+                    <p class="chart-description">مقارنة متوسط الإنجاز المدني والفني لكل جهة منفذة</p>
+                    <div style="text-align: left; margin-bottom: 10px;">
+                        <button class="btn print-btn" onclick="PrintUtils.printChart('branchComparisonChart', 'مقارنة أداء الجهات')">🖨️ طباعة</button>
+                    </div>
+                    <div class="chart-wrapper-xlarge" style="min-height: 500px;">
+                        <canvas id="branchComparisonChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>📊 توزيع المشاريع</h3>
+                        <div style="margin-bottom: 15px;">
+                            <label for="distribution-type" style="font-weight: 600; display: block; margin-bottom: 5px;">نوع التوزيع:</label>
+                            <select id="distribution-type" onchange="Charts.updateDistributionChart()" style="width: 100%; padding: 8px 12px; border: 1px solid var(--gray-light); border-radius: 6px;">
+                                <option value="status">حسب الحالة</option>
+                                <option value="type">حسب النوع</option>
+                                <option value="entity">حسب الجهة المنفذة</option>
+                                <option value="progress">حسب نسبة الإنجاز</option>
+                                <option value="monthly-started">المشاريع المنطلقة شهرياً</option>
+                                <option value="monthly-completed">المشاريع المنجزة شهرياً</option>
+                                <option value="monthly-added">المشاريع المضافة شهرياً (أول ظهور)</option>
+                            </select>
+                            <button class="btn print-btn" onclick="PrintUtils.printDistributionChart()">🖨️ طباعة</button>
+                        </div>
+                        
+                        <div class="chart-wrapper">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>🎯 توزيع المشاريع حسب نسبة الإنجاز</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="progressChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-card full-width">
+                    <h3>📊 تطور الإنجاز للمشاريع الرئيسية</h3>
+                    <div class="chart-wrapper-large">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <section id="performance-analysis" class="section">
+                <div class="section-header">
+                    <h2>🔍 تحليل الأداء المتقدم</h2>
+                    <p>تحليلات عميقة وتاريخية لأداء المشاريع والجدول الزمني</p>
+                </div>
+                
+                <div class="filter-bar" style="margin-bottom: 25px; background: var(--bg-card); padding: 20px; border-radius: var(--border-radius); box-shadow: var(--shadow);">
+                    <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                        <label style="font-weight: 700; color: var(--primary);">الجهة المنفذة:</label>
+                        <select id="analysis-branch-filter" style="min-width: 250px; padding: 10px; border-radius: 8px; border: 1px solid var(--gray-light);">
+                            <option value="">جميع الفروع</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="StatsCenter.generateHistoricalCharts(document.getElementById('analysis-branch-filter').value)" style="padding: 10px 25px;">🔄 تحديث الرسوم البيانية</button>
+                    </div>
+                </div>
+
+                <div class="performance-charts-container">
+                    <!-- الرسم الأول: نسبة مشاريع لم تبدأ لأكثر من شهر -->
+                    <div class="report-card" style="margin-bottom: 40px; padding: 25px; border-right: 8px solid #3498db; background: var(--bg-card);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid var(--light); padding-bottom: 15px;">
+                            <h3 id="notStartedDelayedChart-title" style="margin:0; color: var(--primary); font-size: 1.4rem;">📈 نسبة مشاريع لم تبدأ لأكثر من شهر</h3>
+                            <button class="btn btn-info" onclick="PrintUtils.printChart('notStartedDelayedChart', document.getElementById('notStartedDelayedChart-title').textContent)" style="background: #3498db; color: white;">🖨️ طباعة التقرير البياني</button>
+                        </div>
+                        <div style="height: 500px; width: 100%; background: #fff; border-radius: 10px; padding: 10px;">
+                            <canvas id="notStartedDelayedChart"></canvas>
+                        </div>
+                        <p style="margin-top: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
+                            <strong>وصف المؤشر:</strong> يوضح نسبة المشاريع التي بقيت في حالة "لم تبدأ" لمدة تزيد عن شهر من تاريخ التكليف، مما يعكس التأخير في بدء التنفيذ.
+                        </p>
+                    </div>
+
+                    <!-- الرسم الثاني: نسبة مشاريع بدون تحديث -->
+                    <div class="report-card" style="margin-bottom: 40px; padding: 25px; border-right: 8px solid #e74c3c; background: var(--bg-card);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid var(--light); padding-bottom: 15px;">
+                            <h3 id="noUpdateChart-title" style="margin:0; color: var(--primary); font-size: 1.4rem;">📉 نسبة مشاريع بدون تحديث</h3>
+                            <button class="btn btn-info" onclick="PrintUtils.printChart('noUpdateChart', document.getElementById('noUpdateChart-title').textContent)" style="background: #e74c3c; color: white;">🖨️ طباعة التقرير البياني</button>
+                        </div>
+                        <div style="height: 500px; width: 100%; background: #fff; border-radius: 10px; padding: 10px;">
+                            <canvas id="noUpdateChart"></canvas>
+                        </div>
+                        <p style="margin-top: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
+                            <strong>وصف المؤشر:</strong> يعرض نسبة المشاريع الجارية التي لم يتم تحديث نسب إنجازها لأكثر من شهر، مما يشير إلى ركود في البيانات أو العمل.
+                        </p>
+                    </div>
+
+                    <!-- الرسم الثالث: نسبة مشاريع جارية انتهى تزمينها -->
+                    <div class="report-card" style="margin-bottom: 40px; padding: 25px; border-right: 8px solid #f39c12; background: var(--bg-card);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid var(--light); padding-bottom: 15px;">
+                            <h3 id="expiredOngoingChart-title" style="margin:0; color: var(--primary); font-size: 1.4rem;">⚠️ نسبة مشاريع جارية انتهى تزمينها</h3>
+                            <button class="btn btn-info" onclick="PrintUtils.printChart('expiredOngoingChart', document.getElementById('expiredOngoingChart-title').textContent)" style="background: #f39c12; color: white;">🖨️ طباعة التقرير البياني</button>
+                        </div>
+                        <div style="height: 500px; width: 100%; background: #fff; border-radius: 10px; padding: 10px;">
+                            <canvas id="expiredOngoingChart"></canvas>
+                        </div>
+                        <p style="margin-top: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
+                            <strong>وصف المؤشر:</strong> يبين نسبة المشاريع التي ما زالت قيد التنفيذ رغم انتهاء فترتها الزمنية المخططة.
+                        </p>
+                    </div>
+
+                    <!-- الرسم الرابع: نسبة فحص أولي لأكثر من شهرين -->
+                    <div class="report-card" style="margin-bottom: 40px; padding: 25px; border-right: 8px solid #2c3e50; background: var(--bg-card);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid var(--light); padding-bottom: 15px;">
+                            <h3 id="preAuditDelayedChart-title" style="margin:0; color: var(--primary); font-size: 1.4rem;">⏳ نسبة فحص أولي لأكثر من شهرين</h3>
+                            <button class="btn btn-info" onclick="PrintUtils.printChart('preAuditDelayedChart', document.getElementById('preAuditDelayedChart-title').textContent)" style="background: #2c3e50; color: white;">🖨️ طباعة التقرير البياني</button>
+                        </div>
+                        <div style="height: 500px; width: 100%; background: #fff; border-radius: 10px; padding: 10px;">
+                            <canvas id="preAuditDelayedChart"></canvas>
+                        </div>
+                        <p style="margin-top: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
+                            <strong>وصف المؤشر:</strong> يرصد نسبة المشاريع المنجزة التي استغرقت في مرحلة الفحص الأولي أكثر من 60 يوماً.
+                        </p>
+                    </div>
+
+                    <!-- الرسم الخامس: مشاريع منجزة مع ملاحظات فنية -->
+                    <div class="report-card" style="margin-bottom: 40px; padding: 25px; border-right: 8px solid #27ae60; background: var(--bg-card);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid var(--light); padding-bottom: 15px;">
+                            <h3 id="completedWithNotesChart-title" style="margin:0; color: var(--primary); font-size: 1.4rem;">✅ مشاريع منجزة مع ملاحظات فنية</h3>
+                            <button class="btn btn-info" onclick="PrintUtils.printChart('completedWithNotesChart', document.getElementById('completedWithNotesChart-title').textContent)" style="background: #27ae60; color: white;">🖨️ طباعة التقرير البياني</button>
+                        </div>
+                        <div style="height: 500px; width: 100%; background: #fff; border-radius: 10px; padding: 10px;">
+                            <canvas id="completedWithNotesChart"></canvas>
+                        </div>
+                        <p style="margin-top: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
+                            <strong>وصف المؤشر:</strong> يوضح عدد أو نسبة المشاريع التي تم إنجازها ولكن لا تزال تحتوي على ملاحظات فنية عالقة.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- رسم بياني لاتجاهات مؤشرات الأداء السبعة عبر الزمن -->
+                <div class="report-card" style="margin-bottom: 40px; padding: 25px; border-right: 8px solid #6c3483; background: var(--bg-card);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid var(--light); padding-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <h3 style="margin:0; color: var(--primary); font-size: 1.4rem;">📊 اتجاهات مؤشرات الأداء عبر الزمن</h3>
+                        <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+                            <label style="font-weight:600; white-space:nowrap;">الجهة المنفذة:</label>
+                            <select id="kpi-trend-branch" style="padding:7px 12px; border-radius:6px; border:1px solid var(--gray-light); min-width:175px;" onchange="KpiTrendChart.render()">
+                                <option value="">جميع الفروع</option>
+                            </select>
+                            <label style="font-weight:600; white-space:nowrap; margin-right:6px;">نوع المؤشر:</label>
+                            <select id="kpi-trend-indicator" style="padding:7px 12px; border-radius:6px; border:1px solid var(--gray-light); min-width:175px;" onchange="KpiTrendChart.render()">
+                                <option value="">جميع المؤشرات</option>
+                                <option value="accumulation">تراكم المشاريع</option>
+                                <option value="movement">حركة الفرع</option>
+                                <option value="aging">الشيخوخة</option>
+                                <option value="speed">سرعة الفرع</option>
+                                <option value="gap">فجوة التنفيذ</option>
+                                <option value="commitment">الالتزام الزمني</option>
+                                <option value="closure">إغلاق المشاريع</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="KpiTrendChart.render()" style="padding:7px 18px;">🔄 تحديث</button>
+                            <button class="btn btn-success" onclick="KpiTrendChart.printChart()" style="padding:7px 18px;">🖨️ طباعة</button>
+                        </div>
+                    </div>
+                    <div style="position: relative; height: 420px; width: 100%; background: #fff; border-radius: 10px; padding: 10px;">
+                        <canvas id="kpiTrendChart"></canvas>
+                    </div>
+                    <p style="margin-top: 15px; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                        <strong>وصف الرسم:</strong> يعرض تطور مؤشرات الأداء السبعة عبر تواريخ التحديث المتاحة. قيمة <em>سرعة الفرع</em> مضروبة ×100 لتوحيد المقياس مع باقي المؤشرات — فالقيمة 100% تعني سرعة مساوية للمخطط.
+                    </p>
+                </div>
+
+                <div class="analysis-grid" style="margin-top: 50px; border-top: 2px dashed var(--light); padding-top: 30px;">
+                    <div class="analysis-card">
+                        <div class="analysis-icon">📅</div>
+                        <h3>التقدم الشهري</h3>
+                        <p>مقارنة التقدم بين أشهر متعددة</p>
+                        <div class="input-group">
+                            <label>عدد الأشهر:</label>
+                            <input type="number" id="monthly-months" value="3" min="2">
+                        </div>
+                        <button class="btn btn-primary" onclick="Analysis.generateMonthlyProgressReport()">إخراج التقرير</button>
+                    </div>
+
+                    <div class="analysis-card">
+                        <div class="analysis-icon">📊</div>
+                        <h3>رسم بياني للمشروع</h3>
+                        <p>عرض خطوط تقدم المشاريع عبر الزمن</p>
+                        <div class="input-group">
+                            <label>اختر المشروع:</label>
+                            <select id="project-select"></select>
+                        </div>
+                        <button class="btn btn-info" onclick="Analysis.generateProjectChart()">عرض الرسم البياني</button>
+                        <div class="chart-wrapper" style="margin-top: 15px;">
+                            <canvas id="project-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="analysis-card">
+                        <div class="analysis-icon">🔮</div>
+                        <h3>تنبؤات الإنهاء</h3>
+                        <p>التنبؤ بموعد إنهاء المشروع</p>
+                        <div class="input-group">
+                            <label>اختر المشروع:</label>
+                            <select id="forecast-project-select"></select>
+                        </div>
+                        <div id="forecast-result" class="forecast-result"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="project-details" class="section">
+                <div class="section-header">
+                    <h2>📋 تفاصيل المشروع والتوقعات الذكية</h2>
+                    <p>البحث عن أي مشروع وعرض تاريخه الكامل مع التنبؤ بموعد الإنهاء</p>
+                </div>
+
+                <div class="search-section">
+                    <div class="search-box">
+                        <input type="text" id="project-search-input" placeholder="ابحث عن مشروع بالاسم أو الرقم..." oninput="ProjectDetails.searchProjects(this.value)">
+                        <span class="search-icon">🔍</span>
+                    </div>
+                    <div id="search-results" class="search-results"></div>
+                </div>
+
+                <div id="project-details-content" class="project-details-content">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <p>اختر مشروعاً من نتائج البحث لعرض تفاصيله الكاملة</p>
+                    </div>
+                </div>
+            </section>
+            <section id="evm-analytics" class="section">
+                <div class="section-header">
+                    <h2>📊 مؤشرات EVM للمشروع</h2>
+                    <p>تحليل أداء مشروع محدد باستخدام الإدارة القيمية</p>
+                </div>
+                
+                <div class="search-container" style="max-width: 800px; margin: 0 auto 30px; position: relative;">
+                    <div class="search-box">
+                        <input type="text" id="evm-project-search" placeholder="أدخل اسم المشروع أو رقمه..." oninput="EVMAnalytics.searchProjects()" autocomplete="off">
+                        <span class="search-icon">🔍</span>
+                    </div>
+                    <div id="evm-search-results" class="search-dropdown" style="display: none;"></div>
+                </div>
+
+                <div id="evm-results" class="evm-container">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📊</div>
+                        <p>ابحث عن مشروع لعرض مؤشرات الأداء الخاصة به</p>
+                    </div>
+                </div>
+            </section>
+
+            
+              <section id="branch-indicators" class="section">
+                  <div class="section-header">
+                      <h2>📊 مؤشرات الأداء الخاصة بالفروع</h2>
+                      <p>تحليل مؤشرات تراكم المشاريع، الحركة، الشيخوخة، فجوة التنفيذ وسرعة الفرع</p>
+                  </div>
+                  <div class="filter-bar" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
+                      <div class="filter-group">
+                          <label>الفرع / الجهة المنفذة:</label>
+                          <select id="indicator-branch-filter" onchange="BranchIndicators.calculate()">
+                              <option value="">الكل</option>
+                          </select>
+                      </div>
+                      <div class="filter-group">
+                          <label>الشهر المحدد:</label>
+                          <select id="indicator-month-filter" onchange="BranchIndicators.calculate()">
+                              <option value="">الشهر الحالي</option>
+                          </select>
+                      </div>
+                      <div class="filter-group">
+                          <div id="indicator-period-label" style="font-size:12px; color:var(--text-secondary); margin-top: 4px;"></div>
+                      </div>
+                  </div>
+                  
+                  <div class="indicators-grid">
+                      <div class="stat-item card-troubled">
+                          <span class="stat-label">مؤشر تراكم المشاريع</span>
+                          <span class="stat-value" id="ind-accumulation">0%</span>
+                          <small style="color:var(--text-secondary)">عدد المشاريع الجارية التي تجاوز تاريخ المرجع تاريخ انتهاءها المخطط ÷ إجمالي المشاريع الجارية</small>
+                      </div>
+                      <div class="stat-item card-in-progress">
+                          <span class="stat-label">مؤشر حركة الفرع</span>
+                          <span class="stat-value" id="ind-movement">0%</span>
+                          <small style="color:var(--text-secondary)">المشاريع التي ارتفع فيها التقدم الفعلي (مدني أو فني أو ورش) خلال الفترة ÷ إجمالي المشاريع الجارية</small>
+                      </div>
+                      <div class="stat-item card-not-started">
+                          <span class="stat-label">مؤشر الشيخوخة</span>
+                          <span class="stat-value" id="ind-aging">0%</span>
+                          <small style="color:var(--text-secondary)">Σ(أيام منقضية) ÷ Σ(إنجاز% × أيام مخططة ÷ 100) — 100%=على الجدول، أقل=أفضل</small>
+                      </div>
+                      <div class="stat-item card-completed">
+                          <span class="stat-label">مؤشر سرعة الفرع</span>
+                          <span class="stat-value" id="ind-speed">%</span>
+                          <small style="color:var(--text-secondary)">إجمالي نسب التقدم الفعلي خلال الفترة ÷ إجمالي نسب التقدم التخطيطي خلال الفترة</small>
+                      </div>
+                      <div class="stat-item card-not-started">
+                          <span class="stat-label">مؤشر فجوة التنفيذ</span>
+                          <span class="stat-value" id="ind-gap">0%</span>
+                          <small style="color:var(--text-secondary)">(إجمالي نسب التقدم التخطيطي − إجمالي نسب التقدم الفعلي) ÷ عدد المشاريع الجارية</small>
+                      </div>
+                      <div class="stat-item card-in-progress">
+                          <span class="stat-label">مؤشر الالتزام الزمني</span>
+                          <span class="stat-value" id="ind-commitment">0%</span>
+                          <small style="color:var(--text-secondary)">المشاريع التي لا تتجاوز الفجوة بين التقدم المخطط والفعلي 10% ÷ إجمالي المشاريع الجارية</small>
+                      </div>
+                      <div class="stat-item card-completed">
+                          <span class="stat-label">مؤشر إغلاق المشاريع</span>
+                          <span class="stat-value" id="ind-closure">0%</span>
+                          <small id="ind-closure-desc" style="color:var(--text-secondary)">تحولت من جاري إلى منجز ÷ تحولت من لم يبدأ إلى جاري خلال الفترة</small>
+                      </div>
+                  </div>
+                  
+                  <div style="margin-top: 30px; background: var(--bg-card); padding: 20px; border-radius: var(--border-radius); box-shadow: var(--shadow);">
+                      <h3 style="margin-bottom: 15px; font-size: clamp(14px, 3vw, 18px);">تفاصيل المشاريع الجارية في الفرع</h3>
+                      <div class="no-print" style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                          <button class="btn btn-primary" onclick="BranchIndicators.printTable()">🖨️ طباعة الجدول</button>
+                          <button class="btn btn-success" onclick="BranchIndicators.exportToExcel()">📊 تصدير Excel</button>
+                      </div>
+                      <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;">
+                          <table class="styled-table" id="indicator-projects-table" style="min-width: 700px;">
+                              <thead>
+                                  <tr>
+                                      <th>المشروع</th>
+                                      <th>الحالة</th>
+                                      <th>تاريخ البدء</th>
+                                      <th>تاريخ الانتهاء</th>
+                                      <th>المدة المخططة</th>
+                                      <th>المدة المنقضية</th>
+                                      <th>مخطط%</th>
+                                      <th>فعلي%</th>
+                                      <th>مؤشر الشيخوخة</th>
+                                      <th>فجوة التنفيذ</th>
+                                      <th>سرعة الأداء</th>
+                                  </tr>
+                              </thead>
+                              <tbody></tbody>
+                          </table>
+                      </div>
+                  </div>
+
+                  <!-- مصفوفة المؤشرات حسب الفروع -->
+                  <div style="margin-top: 30px; background: var(--bg-card); padding: 20px; border-radius: var(--border-radius); box-shadow: var(--shadow);">
+                      <h3 style="margin-bottom: 15px; font-size: clamp(14px, 3vw, 18px);">📋 مصفوفة مؤشرات الأداء حسب الفروع</h3>
+                      <div class="no-print" style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                          <button class="btn btn-primary" onclick="BranchIndicators.printMatrix()">🖨️ طباعة المصفوفة</button>
+                          <button class="btn btn-success" onclick="BranchIndicators.exportMatrixToExcel()">📊 تصدير Excel</button>
+                          <button class="btn btn-primary" style="background:#8e44ad;" onclick="BranchIndicators.openMultiViewModal()">🔀 عرض متعدد الأشهر</button>
+                      </div>
+                      <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;">
+                          <table class="styled-table" id="indicator-matrix-table" style="min-width: 500px; width: 100%;">
+                              <thead>
+                                  <tr id="indicator-matrix-header">
+                                      <th style="white-space:nowrap; background: var(--primary); color: white; min-width: 140px;">المؤشر</th>
+                                  </tr>
+                              </thead>
+                              <tbody id="indicator-matrix-body">
+                                  <tr><td style="text-align:center; color:var(--text-secondary); padding: 20px;">يتم حساب البيانات...</td></tr>
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+
+              </section>
+  
+            <section id="stats-center" class="section">
+                <div class="section-header">
+                    <h2>📊 شاشة الإحصائيات الذكية لمشاريع الفروع</h2>
+                    <p>تحليل شامل للمشاريع حسب الحالة والمعايير الزمنية</p>
+                </div>
+                
+                <div class="filter-bar" style="margin-bottom: 20px;">
+                    <div class="filter-group">
+                        <label>الجهة المنفذة:</label>
+                        <select id="stats-branch-filter" onchange="Reports.updateBranchFilters(this.value)">
+                            <option value="">جميع الفروع</option>
+                        </select>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn btn-primary" onclick="StatsCenter.generateStats()">🔄 تحديث</button>
+                        <button class="btn btn-success" onclick="StatsCenter.exportToExcel()">📊 تصدير Excel</button>
+                        <button class="btn btn-info" onclick="printWithTitle()" style="padding: 8px 15px; font-size: 0.85rem;">🖨️ طباعة الشاشة</button>
+                    </div>
+                </div>
+
+                <!-- القسم الأول: المؤشرات الذكية -->
+                <div class="evm-grid evm-grid-3" style="margin-bottom: 30px;">
+                    <div class="evm-card" style="text-align: center;">
+                        <h4>مؤشر حركة الفرع</h4>
+                        <canvas id="branchMovementChart" width="100" height="100"></canvas>
+                        <div class="evm-label">المعادلة: (عدد المشاريع التي سجلت تقدماً / إجمالي المشاريع الجارية) × 100</div>
+                    </div>
+                    <div class="evm-card" style="text-align: center;">
+                        <h4>مؤشر الشيخوخة</h4>
+                        <canvas id="agingChart" width="100" height="100"></canvas>
+                        <div class="evm-label">المعادلة: Σ(منقضية) ÷ Σ(إنجاز% × مخططة ÷ 100) — 100%=على الجدول، أقل=أفضل</div>
+                    </div>
+                    <div class="evm-card" style="text-align: center;">
+                        <h4>مؤشر التراكم الإداري</h4>
+                        <canvas id="adminBacklogChart" width="100" height="100"></canvas>
+                        <div class="evm-label">المعادلة: (مشاريع لم تبدأ + مشاريع قرب الإنجاز) / إجمالي المشاريع × 100</div>
+                    </div>
+                </div>
+
+
+                <!-- القسم الثاني: إحصائيات تشغيلية -->
+                <div class="reports-grid">
+                    <!-- كرت مشاريع لم تبدأ -->
+                    <div class="report-card card-not-started" style="border-right-color: var(--secondary);">
+                        <div class="report-icon">📋</div>
+                        <h3>المشاريع التي لم تبدأ</h3>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('not-started')">
+                            <span class="stat-label">إجمالي لم يبدأ</span>
+                            <span class="stat-value" id="total-not-started">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('delayed-not-started')">
+                            <span class="stat-label">تأخير > شهر</span>
+                            <span class="stat-value text-danger" id="delayed-not-started-month">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('not-started-over-year')" title="مشاريع لم تبدأ ومر على تكليفها أكثر من سنة">
+                            <span class="stat-label">مشاريع منسية لم تبدأ > سنة</span>
+                            <span class="stat-value text-danger" id="not-started-over-year">0</span>
+                        </div>
+                        <div style="margin-top: 15px; text-align: center; background: rgba(52, 152, 219, 0.05); padding: 10px; border-radius: 8px;">
+                            <div class="evm-label">متوسط عمر المشروع قبل البدء</div>
+                            <div class="evm-value" style="font-size: 1.2rem; color: var(--secondary);" id="avg-age-before-start">0 يوم</div>
+                        </div>
+                    </div>
+
+                    <!-- كرت مشاريع جارية -->
+                    <div class="report-card card-in-progress" style="border-right-color: var(--success);">
+                        <div class="report-icon">⚙️</div>
+                        <h3>المشاريع الجارية</h3>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('ongoing')">
+                            <span class="stat-label">عدد المشاريع الجارية</span>
+                            <span class="stat-value" id="total-in-progress">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('ongoing-expired')" title="مشاريع جارية انتهت فترة تزمينها المخططة">
+                            <span class="stat-label">مشاريع جارية متأخرة(متجاوزة التزمين)</span>
+                            <span class="stat-value text-danger" id="ongoing-expired-schedule">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('ongoing-within')">
+                            <span class="stat-label">مشاريع جارية ضمن التزمين </span>
+                            <span class="stat-value" id="ongoing-within-schedule">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('ongoing-over-80')">
+                            <span class="stat-label">مشاريع جاريه تجاوزت 80% من زمنها</span>
+                            <span class="stat-value text-warning" id="ongoing-over-80-time">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('ongoing-expired-near')">
+                            <span class="stat-label">مشاريع جاريه انتهى زمنها والانجاز >90</span>
+                            <span class="stat-value text-danger" id="ongoing-expired-near-completion">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('ongoing-expired-not-near')">
+                            <span class="stat-label">متجاوزة التزمين (ليست قرب الإنجاز)</span>
+                            <span class="stat-value text-danger" id="ongoing-expired-not-near">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('ongoing-no-update')">
+                            <span class="stat-label" style="font-weight: bold;">بدون تحديث > شهر</span>
+                            <span class="stat-value text-danger" id="ongoing-no-update">0</span>
+                        </div>
+                    </div>
+
+                    <!-- كرت مشاريع منجزة -->
+                    <div class="report-card card-completed" style="border-right-color: var(--primary);">
+                        <div class="report-icon">✅</div>
+                        <h3>المشاريع المنجزة</h3>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('completed')">
+                            <span class="stat-label">اجمالي عدد المشاريع المنجزة</span>
+                            <span class="stat-value" id="total-completed">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('pre-audit')">
+                            <span class="stat-label"> مشاريع منجزة - فحص أولي</span>
+                            <span class="stat-value" id="completed-pre-audit">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('pre-audit-60d')">
+                            <span class="stat-label">مشاريع منجزه فحص أولي > 60 يوم</span>
+                            <span class="stat-value text-danger" id="completed-pre-audit-60d">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('sub-status-15d')" title="مشاريع منجزة (حالة فرعية منجز) مر عليها أكثر من 15 يوم">
+                            <span class="stat-label">مشاريع منجزة متأخر تسليم ملفاتها>15 يوم</span>
+                            <span class="stat-value text-danger" id="completed-sub-status-15d">0</span>
+                        </div>
+                        <div class="stat-item" style="cursor: pointer;" onclick="StatsCenter.showCategoryDetails('completed-cost')" title="إجمالي كلفة مشاريع (جاري الإقفال، مقفل نهائي، منجز)">
+                            <span class="stat-label">اجمالي كلفة المشاريع المنجزة </span>
+                            <span class="stat-value" id="total-cost-closure-completed">0</span>
+                        </div>
+                        <div style="margin-top: 15px; text-align: center; background: rgba(44, 62, 80, 0.05); padding: 10px; border-radius: 8px;">
+                            <div class="evm-label">متوسط مدة الفحص الأولي</div>
+                            <div class="evm-value" style="font-size: 1.2rem; color: var(--primary);" id="avg-pre-audit-time">0 يوم</div>
+                        </div>
+                    </div>
+
+                    <!-- كرت مشاريع غير طبيعية -->
+                    <div class="report-card card-troubled" style="border-right-color: var(--danger);">
+                        <div class="report-icon">🚫</div>
+                        <h3>مشاريع غير طبيعية</h3>
+                        <div class="stat-item">
+                            <span class="stat-label">متوقفة</span>
+                            <span class="stat-value" id="total-stalled">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">متعثرة</span>
+                            <span class="stat-value" id="total-troubled">0</span>
+                        </div>
+                        <div style="margin-top: 15px; text-align: center; background: rgba(231, 76, 60, 0.05); padding: 10px; border-radius: 8px;">
+                            <div class="evm-label">نسبة المشاريع غير الصحية</div>
+                            <div class="evm-value text-danger" style="font-size: 1.4rem; font-weight: 800;" id="unhealthy-projects-ratio">0%</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- قسم الزمن الحرج -->
+            <section id="critical-path" class="section">
+                <div class="section-header">
+                    <h2>⏱️ قسم الزمن الحرج (CPM)</h2>
+                    <p>تحليل المسار الحرج وحساب نسب الإنجاز المخططة والفعلية</p>
+                </div>
+
+                <div class="search-section">
+                    <div class="search-box">
+                        <input type="text" id="cpm-project-search" placeholder="ابحث عن مشروع بالاسم أو الرقم..." oninput="CriticalPath.searchProjects(this.value)">
+                        <span class="search-icon">🔍</span>
+                    </div>
+                    <div id="cpm-search-results" class="search-results"></div>
+                </div>
+
+                <div id="cpm-content" class="project-details-content">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏱️</div>
+                        <p>اختر مشروعاً من نتائج البحث لإدارة الزمن الحرج</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- قسم الخطة الزمنية -->
+            <section id="timeline-plan" class="section">
+                <div class="section-header">
+                    <h2>🗓️ الخطة الزمنية</h2>
+                    <p>متابعة المشاريع المخطط بدؤها وتحليل الانحرافات</p>
+                </div>
+
+                <!-- 1. Projects Not Started Report -->
+                <div class="report-card">
+                    <h3>⏳ جدولة المشاريع التي لم تبدأ</h3>
+                    <div class="filter-bar" style="margin-bottom: 15px;">
+                         <label>تصفية حسب الجهة:</label>
+                         <select id="timeline-not-started-branch-filter" onchange="TimelinePlan.updateNotStartedTable(); TimelinePlan.updateNotifications();">
+                             <option value="">جميع الفروع</option>
+                         </select>
+                         <div style="margin-right: auto; display: flex; gap: 10px; flex-wrap: wrap;">
+                             <button class="btn btn-primary" onclick="TimelinePlan.printNotStartedTable()">🖨️ طباعة الجدولة</button>
+                             <button class="btn btn-success" onclick="TimelinePlan.exportNotStartedToExcel()">📊 تصدير Excel</button>
+                             <input type="file" id="timeline-excel-upload" accept=".xlsx, .xls" style="display: none;" onchange="TimelinePlan.importFromExcel(this)">
+                             <button class="btn btn-warning" onclick="document.getElementById('timeline-excel-upload').click()">📥 استيراد من Excel (مشرفين)</button>
+                         </div>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="styled-report-table" id="timeline-planning-table">
+                            <thead>
+                                <tr>
+                                    <th>رقم المشروع</th>
+                                    <th>اسم المشروع</th>
+                                    <th>الجهة المنفذة</th>
+                                    <th>تاريخ البدء المخطط</th>
+                                    <th>مدة التنفيذ (أيام)</th>
+                                    <th>تاريخ الانتهاء المخطط</th>
+                                    <th>المشرف</th>
+                                    <th>حفظ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="timeline-not-started-body">
+                                <!-- Rows injected via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 2. In-Progress Projects Supervisor Table -->
+                <div class="report-card" style="margin-bottom: 25px;">
+                    <h3>🔄 المشاريع الجارية - تعيين المشرفين</h3>
+                    <div class="filter-bar" style="margin-bottom: 15px;">
+                        <label>تصفية حسب الجهة:</label>
+                        <select id="timeline-inprogress-branch-filter" onchange="TimelinePlan.updateInProgressTable()">
+                            <option value="">جميع الفروع</option>
+                        </select>
+                        <div style="margin-right: auto; display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button class="btn btn-primary" onclick="TimelinePlan.printInProgressTable()">🖨️ طباعة</button>
+                            <button class="btn btn-success" onclick="TimelinePlan.exportInProgressToExcel()">📊 تصدير Excel</button>
+                        </div>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="styled-report-table" id="timeline-inprogress-table">
+                            <thead>
+                                <tr>
+                                    <th>رقم المشروع</th>
+                                    <th>اسم المشروع</th>
+                                    <th>الجهة المنفذة</th>
+                                    <th>نسبة الإنجاز</th>
+                                    <th>الحالة</th>
+                                    <th>المشرف</th>
+                                    <th>حفظ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="timeline-inprogress-body">
+                                <!-- Rows injected via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 3. Notifications (filtered by branch above) -->
+                <div class="report-card" style="margin-bottom: 30px; border-right: 5px solid #f39c12;">
+                    <h3>🔔 إشعارات البدء</h3>
+                    <div id="timeline-notifications" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+                        <!-- Notifications will be injected here -->
+                    </div>
+                </div>
+
+                <!-- 3. Deviation Tracking -->
+                <div class="report-card">
+                    <h3>📉 تحليل الانحرافات (المخطط vs الفعلي)</h3>
+                     <div class="filter-bar" style="margin-bottom: 15px;">
+                         <button class="btn btn-primary" onclick="TimelinePlan.generateDeviationReport()">تحديث التقرير</button>
+                         <button class="btn btn-success" onclick="TimelinePlan.exportDeviationReport()">تصدير Excel</button>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="styled-report-table">
+                            <thead>
+                                <tr>
+                                    <th>رقم المشروع</th>
+                                    <th>اسم المشروع</th>
+                                    <th>تاريخ البدء المخطط</th>
+                                    <th>تاريخ الحالة (الفعلي)</th>
+                                    <th>الانحراف (أيام)</th>
+                                    <th>الحالة</th>
+                                </tr>
+                            </thead>
+                            <tbody id="timeline-deviation-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                 <!-- 4. Gantt Chart -->
+                <div class="report-card full-width">
+                    <h3>📊 المخطط الزمني (Gantt Chart)</h3>
+                     <div class="filter-bar" style="margin-bottom: 15px;">
+                         <label>تصفية حسب الجهة:</label>
+                         <select id="gantt-branch-filter" onchange="TimelinePlan.renderGanttChart()">
+                             <option value="">جميع الفروع</option>
+                         </select>
+                         <label>المشرف:</label>
+                         <select id="gantt-supervisor-filter" onchange="TimelinePlan.renderGanttChart()">
+                             <option value="">الكل</option>
+                         </select>
+                         <div style="margin-right: auto; display: flex; gap: 10px;">
+                             <button class="btn btn-warning" onclick="TimelinePlan.shiftSupervisorProjects()">⏩ إزاحة مشاريع مشرف</button>
+                             <button class="btn btn-primary" onclick="TimelinePlan.printGanttChart()">🖨️ طباعة المخطط</button>
+                         </div>
+                    </div>
+                    <div id="gantt-chart-container" style="overflow-x: auto; min-height: 400px; position: relative;">
+                        <!-- Gantt Chart rendered here -->
+                    </div>
+                </div>
+
+                <!-- 5. جدول المشاريع حسب الجهة والمشرف (لم تبدأ + جارية) -->
+                <div class="report-card full-width" style="margin-top: 25px;">
+                    <h3>📋 جدول المشاريع حسب الجهة المنفذة والمشرف</h3>
+                    <div class="filter-bar" style="margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <label>الجهة المنفذة:</label>
+                        <select id="combined-branch-filter" onchange="TimelinePlan.onCombinedBranchChange()">
+                            <option value="">-- اختر الجهة --</option>
+                        </select>
+                        <label>المشرف:</label>
+                        <select id="combined-supervisor-filter" onchange="TimelinePlan.updateCombinedTable()">
+                            <option value="">-- اختر المشرف --</option>
+                        </select>
+                        <div style="margin-right: auto; display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button class="btn btn-secondary" id="combined-gantt-btn" onclick="TimelinePlan.renderCombinedGantt()" style="display:none;">
+                                📊 رسم مخطط جانت
+                            </button>
+                        </div>
+                    </div>
+                    <div id="combined-table-wrap" style="overflow-x: auto; display: none;">
+                        <table class="styled-report-table" id="combined-projects-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>اسم المشروع</th>
+                                    <th>رقم الحساب</th>
+                                    <th>حالة المشروع</th>
+                                    <th>تاريخ البدء التخطيطي</th>
+                                    <th>مدة المشروع (أيام)</th>
+                                    <th>تاريخ الانتهاء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="combined-projects-body">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="combined-table-empty" style="text-align:center; color: var(--text-secondary); padding: 30px;">
+                        اختر الجهة المنفذة والمشرف لعرض المشاريع
+                    </div>
+                    <!-- مخطط جانت المدمج -->
+                    <div id="combined-gantt-wrap" style="display:none; margin-top: 20px; overflow-x: auto; border:1px solid var(--gray-light); border-radius:10px; padding:12px; background:var(--bg-primary);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                            <h4 style="margin:0; color:var(--primary);">📊 مخطط جانت - الفترة الزمنية للمشاريع</h4>
+                            <button class="btn btn-primary btn-sm" onclick="TimelinePlan.printCombinedGantt()">🖨️ طباعة المخطط</button>
+                        </div>
+                        <div id="combined-gantt-inner"></div>
+                    </div>
+                </div>
+
+                <!-- 6. إحصائيات اختيار المشرف + طاقة الفرع (تبويب فرعي تراكمي) -->
+                <div class="report-card full-width" style="margin-top:25px; border-right:5px solid #8b5cf6;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <h3 style="margin:0;">📊 إحصائيات اختيار المشرف وطاقة الفرع
+                            <span style="font-size:0.78rem; background:#8b5cf6; color:white; padding:3px 10px; border-radius:12px; margin-right:8px;">تراكمي</span>
+                            <span style="font-size:0.78rem; color:var(--text-secondary);">(<span id="sel-stats-total-count">0</span> سجل)</span>
+                        </h3>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button class="btn btn-secondary btn-sm" onclick="TimelinePlan.renderSelectionStats()">🔁 تحديث</button>
+                            <button class="btn btn-warning btn-sm" onclick="if(confirm('سيتم مسح الإحصائية وإعادة بنائها من البيانات الحالية. متابعة؟')) SelectionStats.rebuildFromScratch()">🔄 إعادة بناء</button>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-secondary); margin:8px 0 14px; font-size:0.86rem;">
+                        يتعلّم النظام من قراراتك السابقة (تخصيص المشرف + تاريخ البدء) ومن جميع المشاريع الموجودة لاستنتاج: من المشرف المُفضَّل لكل نوع مشروع داخل كل فرع، ومركز عمله الجغرافي، وطاقة الفرع الإجمالية الشهرية.
+                    </p>
+
+                    <!-- بطاقة طاقة الفرع -->
+                    <div id="sel-stats-tab-content">
+                        <div class="filter-bar" style="margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+                            <label style="font-weight:600;">🏢 الجهة المنفذة:</label>
+                            <select id="sel-stats-branch" onchange="TimelinePlan.onStatsBranchChange()" style="min-width:180px;">
+                                <option value="">— كل الفروع —</option>
+                            </select>
+                            <label style="font-weight:600;">🏗️ نوع المشروع:</label>
+                            <select id="sel-stats-type" onchange="TimelinePlan.onStatsTypeChange()" style="min-width:200px;">
+                                <option value="">— كل الأنواع —</option>
+                            </select>
+                        </div>
+
+                        <!-- بطاقة طاقة الفرع (3 مؤشرات + توقع) -->
+                        <div style="background:var(--bg-secondary); border-radius:12px; padding:14px; margin-bottom:18px;">
+                            <h4 style="margin:0 0 10px; color:var(--primary);">⚙️ طاقة الجدولة للفرع — للانتقال نحو جدولة الفرع ككل</h4>
+                            <div id="sel-stats-capacity">
+                                <div style="padding:14px; color:var(--text-secondary); text-align:center;">اختر فرعاً لعرض المؤشرات</div>
+                            </div>
+                        </div>
+
+                        <!-- جدول المشرفين المرتب -->
+                        <h4 id="sel-stats-table-title" style="margin:0 0 8px; color:var(--primary);">🏆 ترتيب المشرفين</h4>
+                        <div style="overflow-x:auto;">
+                            <table class="styled-report-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:60px;">الترتيب</th>
+                                        <th>المشرف</th>
+                                        <th style="width:110px;">عدد المشاريع</th>
+                                        <th style="width:200px;">الحصة %</th>
+                                        <th>المركز الجغرافي</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sel-stats-sup-body">
+                                    <tr><td colspan="5" style="text-align:center; color:var(--text-secondary); padding:18px;">جارٍ التحميل…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            
+            <!-- ═════ قسم إدارة المواقع الجغرافية (Stream Refactor) ═════ -->
+            <section id="geo-management" class="section">
+                <div class="section-header">
+                    <h2>🗺️ إدارة المواقع الجغرافية</h2>
+                    <p>حدد إحداثيات المشاريع والمشرفين لتفعيل الجدولة المعتمدة على القرب الجغرافي (Stream-based)</p>
+                </div>
+
+                <div class="report-card" style="margin-bottom:18px;">
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
+                        <div>
+                            <label style="font-weight:700; display:block; margin-bottom:4px;">نوع الكيان:</label>
+                            <select id="geo-entity-type" onchange="GeoManager.refreshEntityList()" style="padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;">
+                                <option value="project">مشروع</option>
+                                <option value="supervisor">مشرف</option>
+                            </select>
+                        </div>
+                        <div id="geo-project-filters" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                            <div>
+                                <label style="font-weight:700; display:block; margin-bottom:4px;">الجهة المنفذة:</label>
+                                <select id="geo-branch-filter" onchange="GeoManager.refreshEntityList()" style="min-width:160px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;">
+                                    <option value="">جميع الفروع</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-weight:700; display:block; margin-bottom:4px;">حالة المشروع:</label>
+                                <select id="geo-status-filter" onchange="GeoManager.refreshEntityList()" style="min-width:140px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;">
+                                    <option value="">كل الحالات</option>
+                                    <option value="جاري">جاري</option>
+                                    <option value="لم يبدأ">لم يبدأ</option>
+                                    <option value="منجز">منجز</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-weight:700; display:block; margin-bottom:4px;">نوع المشروع:</label>
+                                <select id="geo-type-filter" onchange="GeoManager.refreshEntityList()" style="min-width:160px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;">
+                                    <option value="">كل الأنواع</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="GeoManager.refreshEntityList()">🔄 تحديث</button>
+                    </div>
+
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px; padding:10px; background:var(--bg-secondary); border-radius:10px;">
+                        <div id="geo-project-input-wrap">
+                            <label style="font-weight:700; display:block; margin-bottom:4px;">رقم المشروع:</label>
+                            <input type="text" id="geo-project-number-input" placeholder="أدخل رقم المشروع..." oninput="GeoManager.onProjectNumberInput(this.value)" style="width:220px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;">
+                            <div id="geo-project-search-results" style="position:relative;"></div>
+                        </div>
+                        <div id="geo-supervisor-select-wrap" style="display:none;">
+                            <label style="font-weight:700; display:block; margin-bottom:4px;">المشرف:</label>
+                            <select id="geo-supervisor-select" onchange="GeoManager._loadCurrent()" style="min-width:240px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;"></select>
+                        </div>
+                        <div id="geo-current-entity-label" style="font-size:0.85rem; color:var(--text-secondary); padding:6px 10px; background:var(--bg-primary); border-radius:6px; align-self:center;">— لم يتم تحديد كيان —</div>
+                    </div>
+
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+                        <label>خط العرض (lat):</label>
+                        <input type="number" id="geo-lat" step="0.000001" placeholder="24.7136" style="width:140px; padding:7px 10px; border:1px solid var(--gray-light); border-radius:8px;">
+                        <label>خط الطول (lng):</label>
+                        <input type="number" id="geo-lng" step="0.000001" placeholder="46.6753" style="width:140px; padding:7px 10px; border:1px solid var(--gray-light); border-radius:8px;">
+                        <button class="btn btn-primary btn-sm" onclick="GeoManager.saveCurrent()">💾 حفظ الإحداثيات</button>
+                        <button class="btn btn-warning btn-sm" onclick="GeoManager.deleteCurrent()">🗑️ حذف</button>
+                        <span style="font-size:0.82rem; color:var(--text-secondary);">انقر على الخريطة لتحديد الموقع تلقائياً</span>
+                    </div>
+                    <div id="geo-map"></div>
+                </div>
+
+                <div class="report-card" style="margin-bottom:18px;">
+                    <h3>📋 الإحداثيات المخزنة</h3>
+                    <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                        <button class="btn btn-secondary btn-sm" onclick="GeoManager.renderTable('project')">عرض المشاريع</button>
+                        <button class="btn btn-secondary btn-sm" onclick="GeoManager.renderTable('supervisor')">عرض المشرفين</button>
+                        <span style="margin-right:auto; font-size:0.82rem; color:var(--text-secondary);">المشاريع/المشرفون بدون إحداثيات يتم استنتاج مواقعهم من الفرع تلقائياً.</span>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="styled-report-table" id="geo-table">
+                            <thead><tr><th>#</th><th>الاسم/الرقم</th><th>الفرع</th><th>lat</th><th>lng</th><th>إجراءات</th></tr></thead>
+                            <tbody id="geo-tbody"><tr><td colspan="6" style="text-align:center; color:var(--text-secondary);">اضغط "عرض المشاريع" أو "عرض المشرفين"</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ═════ المسارات الحالية المُكتشفة من المشاريع الجارية + المخططة ═════ -->
+                <div class="report-card">
+                    <h3>🌊 المسارات (Streams) المُكتشفة من المشاريع الحالية</h3>
+                    <p style="color:var(--text-secondary); font-size:0.86rem; margin-bottom:10px;">
+                        كل مجموعة من المشاريع (الجارية أو لم تبدأ) المرتبطة بمشرف معين داخل نفس الفرع/النوع تُعتبر مساراً (Stream).
+                    </p>
+                    <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                        <label style="font-weight:700;">تصفية بالجهة المنفذة:</label>
+                        <select id="geo-streams-branch-filter" onchange="GeoManager.renderStreams()" style="min-width:180px; padding:7px 10px; border:1px solid var(--gray-light); border-radius:8px;">
+                            <option value="">جميع الفروع</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="GeoManager.renderStreams()">🔄 تحديث المسارات</button>
+                    </div>
+                    <div id="geo-streams-container"><p style="color:var(--text-secondary); text-align:center;">اضغط "تحديث المسارات" لعرض المسارات الحالية</p></div>
+                </div>
+            </section>
+
+            <!-- ═════ قسم وضع الجدولة (executionMode + schedulingStatus) ═════ -->
+            <section id="scheduling-mode" class="section">
+                <div class="section-header">
+                    <h2>⚙️ وضع التنفيذ وحالة الجدولة</h2>
+                    <p>يحدد نوع التنفيذ (معدات/عمالة) قواعد التزامن داخل الـ Stream — معدات = تسلسلي، عمالة = موازي.</p>
+                </div>
+
+                <div class="report-card" style="margin-bottom:18px;">
+                    <h3>🔧 الافتراضي حسب نوع المشروع <span style="font-size:0.78rem; font-weight:400; color:var(--text-secondary);">— قابل للتعديل</span></h3>
+                    <p style="color:var(--text-secondary); font-size:0.88rem; margin-bottom:10px;">عدّل وضع التنفيذ الافتراضي لكل نوع مشروع. سيُطبق على المشاريع الجديدة التي لم يتم تخصيص وضع لها يدوياً.</p>
+                    <div id="execution-mode-defaults" style="display:flex; gap:14px; flex-wrap:wrap; padding:10px; background:var(--bg-secondary); border-radius:10px;"></div>
+                    <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+                        <input type="text" id="new-exec-mode-type" placeholder="إضافة نوع مشروع جديد..." style="padding:7px 10px; border:1px solid var(--gray-light); border-radius:8px; min-width:220px;">
+                        <select id="new-exec-mode-value" style="padding:7px 10px; border:1px solid var(--gray-light); border-radius:8px;">
+                            <option value="labor">👷 عمالة (موازي)</option>
+                            <option value="equipment">🛠️ معدات (تسلسلي)</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" onclick="SchedulingMode.addDefaultType()">➕ إضافة</button>
+                    </div>
+                </div>
+
+                <div class="report-card">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+                        <label style="font-weight:700;">حالة المشروع:</label>
+                        <select id="sched-mode-filter" style="padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;" onchange="SchedulingMode.renderTable()">
+                            <option value="">الكل</option>
+                            <option value="not-started">لم يبدأ</option>
+                            <option value="ongoing">جاري</option>
+                            <option value="completed">منجز</option>
+                        </select>
+                        <label style="font-weight:700;">الجهة المنفذة:</label>
+                        <select id="sched-mode-branch-filter" style="min-width:160px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;" onchange="SchedulingMode.renderTable()">
+                            <option value="">جميع الفروع</option>
+                        </select>
+                        <label style="font-weight:700;">نوع المشروع:</label>
+                        <select id="sched-mode-type-filter" style="min-width:160px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;" onchange="SchedulingMode.renderTable()">
+                            <option value="">جميع الأنواع</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="SchedulingMode.renderTable()">🔄 تحديث</button>
+                        <button class="btn btn-success btn-sm" onclick="SchedulingMode.applyDefaultsToAll()">⚡ تطبيق الافتراضيات على الكل</button>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="styled-report-table" id="sched-mode-table">
+                            <thead><tr><th>#</th><th>اسم المشروع</th><th>الفرع</th><th>النوع</th><th>الحالة</th><th>وضع التنفيذ</th><th>حالة الجدولة</th></tr></thead>
+                            <tbody id="sched-mode-tbody"><tr><td colspan="7" style="text-align:center; color:var(--text-secondary);">اضغط "تحديث" بعد تحميل البيانات</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═════ نهاية أقسام Stream Refactor ═════ -->
+            <!-- ===== قسم الجدولة التلقائية ===== -->
+            <section id="auto-scheduling" class="section">
+                <div class="section-header">
+                    <h2>🤖 محرك الجدولة التلقائية</h2>
+                    <p>جدولة ذكية قائمة على مهارات المشرفين والإنتاجية التاريخية الفعلية</p>
+                </div>
+
+                <!-- بطاقة إعدادات مهارات المشرفين -->
+                <div class="report-card" style="margin-bottom: 22px;">
+                    <h3>👥 إعدادات مهارات المشرفين</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">
+                        حدد أنواع المشاريع التي يُتاح لكل مشرف تنفيذها. سيلتزم محرك الجدولة بهذه القيود تلقائياً.
+                    </p>
+                    <div class="filter-bar" style="margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <label style="font-weight: 600;">الحمل الأقصى للمشرف (مشاريع متزامنة):</label>
+                        <input type="number" id="auto-sched-max-load" value="3" min="1" max="15"
+                               style="width: 70px; padding: 6px 10px; border: 1px solid var(--gray-light); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
+                        <div style="margin-right: auto; display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-secondary btn-sm" onclick="AutoScheduling.addSkillRow()">➕ إضافة مشرف</button>
+                            <button class="btn btn-primary btn-sm" onclick="AutoScheduling.saveSkillsMatrix()">💾 حفظ الإعدادات</button>
+                            <button class="btn btn-warning btn-sm" onclick="AutoScheduling.autoDetectSupervisors()">🔍 استخراج من البيانات</button>
+                        </div>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="styled-report-table" id="skills-matrix-table">
+                            <thead>
+                                <tr>
+                                    <th>المشرف</th>
+                                    <th>أنواع المشاريع المسموحة</th>
+                                    <th>الحمل المتزامن الحالي</th>
+                                    <th>أقصى حمل متزامن</th>
+                                    <th>أقرب تاريخ متاح</th>
+                                    <th>إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="skills-matrix-tbody">
+                                <tr id="skills-empty-row">
+                                    <td colspan="6" style="text-align:center; color: var(--text-secondary);">
+                                        اضغط "استخراج من البيانات" لاستيراد المشرفين تلقائياً، أو "إضافة مشرف" لإدراجهم يدوياً.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- زر التوليد -->
+                <div class="filter-bar" style="justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <label style="font-weight: 600;">تصفية حسب الجهة:</label>
+                        <select id="auto-sched-branch-filter" style="min-width: 180px; padding: 8px 12px; border: 1px solid var(--gray-light); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary);">
+                            <option value="">جميع الفروع</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" onclick="AutoScheduling.generate()" style="font-size: 1rem; padding: 12px 25px;">
+                            ⚡ توليد الجدولة التلقائية
+                        </button>
+                        <button class="btn btn-info" onclick="AutoScheduling.openConcurrentGroupManager()" style="background:#8e44ad;">
+                            🔀 إدارة التزامن اليدوي
+                        </button>
+                        <button class="btn btn-success" onclick="AutoScheduling.pushToTimeline()" id="auto-sched-push-btn" disabled>
+                            📥 إرسال إلى الخطة الزمنية
+                        </button>
+                        <button class="btn btn-warning" onclick="AutoScheduling.exportToExcel()">
+                            📊 تصدير Excel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- مبدّل المحرك تم نقله إلى قسم "جدولة المسارات (Streams)" المستقل -->
+
+
+                <!-- لوحة تحليل الإنتاجية -->
+                <div id="auto-sched-analytics" style="display: none;">
+                    <div class="dashboard-grid" style="margin-bottom: 20px;">
+                        <div class="dashboard-card">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                                <h3 style="margin:0;">📈 إنتاجية الفروع (متوسط شهري)</h3>
+                                <button class="btn btn-secondary btn-sm"
+                                        onclick="AutoScheduling.toggleBranchMultiMonthPanel()"
+                                        style="font-size:0.8rem; padding:5px 11px;">
+                                    📅 مقارنة الأشهر
+                                </button>
+                            </div>
+                            <!-- لوحة اختيار الأشهر -->
+                            <div id="as-branch-multimonth-panel" style="display:none; background:var(--bg-secondary); border:1px solid var(--gray-light); border-radius:8px; padding:12px; margin-bottom:12px;">
+                                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                                    <label style="font-weight:600; font-size:0.88rem;">السنة:</label>
+                                    <input type="number" id="as-branch-mm-year"
+                                           value="" min="2000" max="2100"
+                                           onchange="AutoScheduling._populateMonthCheckboxes()"
+                                           style="width:80px; padding:5px 8px; border:1px solid var(--gray-light); border-radius:6px; font-size:0.88rem;">
+                                </div>
+                                <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+                                    <label style="font-weight:600; width:100%; font-size:0.86rem; margin-bottom:2px;">اختر الأشهر:</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M01"> يناير</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M02"> فبراير</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M03"> مارس</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M04"> أبريل</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M05"> مايو</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M06"> يونيو</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M07"> يوليو</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M08"> أغسطس</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M09"> سبتمبر</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M10"> أكتوبر</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M11"> نوفمبر</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="M12"> ديسمبر</label>
+                                    <label style="font-size:0.82rem;"><input type="checkbox" class="as-mm-cb" value="FULL"> السنة كاملة</label>
+                                </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    <button class="btn btn-primary btn-sm"
+                                            onclick="AutoScheduling.generateBranchProductivityMultiMonth()"
+                                            style="font-size:0.82rem; padding:6px 14px;">
+                                        🔍 عرض النتائج
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm"
+                                            onclick="document.querySelectorAll('.as-mm-cb').forEach(c=>c.checked=true)"
+                                            style="font-size:0.82rem; padding:6px 10px;">تحديد الكل</button>
+                                    <button class="btn btn-secondary btn-sm"
+                                            onclick="document.querySelectorAll('.as-mm-cb').forEach(c=>c.checked=false)"
+                                            style="font-size:0.82rem; padding:6px 10px;">إلغاء الكل</button>
+                                </div>
+                            </div>
+                            <div id="auto-sched-branch-productivity" style="max-height: 300px; overflow-y: auto;"></div>
+                        </div>
+                        <div class="dashboard-card">
+                            <h3>🏆 حمل المشرفين</h3>
+                            <div id="auto-sched-supervisor-load" style="max-height: 300px; overflow-y: auto;"></div>
+                        </div>
+                        <div class="dashboard-card">
+                            <h3>📊 ملخص التوليد</h3>
+                            <div id="auto-sched-summary" class="stats-list"></div>
+                        </div>
+                    </div>
+                    <div class="chart-card" style="margin-bottom: 20px;">
+                        <h3>📊 مقارنة إنتاجية الفروع</h3>
+                        <div class="chart-wrapper" style="height: 280px;">
+                            <canvas id="auto-sched-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- قسم الأعباء حسب نوع المشروع -->
+                <div class="report-card" style="margin-bottom: 22px;">
+                    <h3>📂 الأعباء حسب نوع المشروع</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">
+                        عدد المشاريع المسندة لكل مشرف حسب نوع المشروع المحدد
+                    </p>
+                    <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:15px;">
+                        <label style="font-weight:600;">اختر نوع المشروع:</label>
+                        <select id="workload-by-type-select"
+                                style="min-width:200px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px; background:var(--bg-primary); color:var(--text-primary);"
+                                onchange="AutoScheduling.renderWorkloadByType()">
+                            <option value="">-- اختر النوع --</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="AutoScheduling._populateTypeSelect(); AutoScheduling.renderWorkloadByType();">🔄 تحديث</button>
+                    </div>
+                    <div id="workload-by-type-result">
+                        <p style="color:var(--text-secondary); text-align:center; padding:20px;">اختر نوع المشروع لعرض التوزيع</p>
+                    </div>
+                </div>
+
+                <!-- لوحة التحذيرات -->
+                <div id="auto-sched-warnings" style="display: none; margin-bottom: 18px;"></div>
+
+                <!-- جدول النتائج -->
+                <div class="report-card">
+                    <h3>📋 نتائج الجدولة التلقائية</h3>
+                    <div id="auto-sched-legend" style="display:none; margin-bottom:10px; padding:8px 14px; background:var(--bg-secondary); border-radius:10px; border:1px solid var(--gray-light);">
+                        <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:center; font-size:0.82rem;">
+                            <span style="font-weight:700; color:var(--text-secondary);">دليل الألوان:</span>
+                            <span style="display:flex; align-items:center; gap:6px;">
+                                <span style="width:14px; height:14px; border-radius:4px; background:rgba(39,174,96,0.18); display:inline-block; border:1px solid #27ae60;"></span>
+                                <strong style="color:#27ae60;">جُدوِل الآن</strong> — لا يوجد planFrom، تم تخصيص تاريخ بدء جديد
+                            </span>
+                            <span style="display:flex; align-items:center; gap:6px;">
+                                <span style="width:14px; height:14px; border-radius:4px; background:rgba(52,152,219,0.12); display:inline-block; border:1px solid #2980b9;"></span>
+                                <strong style="color:#2980b9;">مجدول مسبقاً</strong> — يوجد planFrom، التواريخ لا تُعدَّل
+                            </span>
+                            <span style="display:flex; align-items:center; gap:6px;">
+                                <span style="width:14px; height:14px; border-radius:4px; background:rgba(243,156,18,0.15); display:inline-block; border:1px solid #f39c12;"></span>
+                                <strong style="color:#e67e22;">ينتظر المدة</strong> — أدخل مدة التنفيذ يدوياً لحساب التواريخ
+                            </span>
+                        </div>
+                    </div>
+                    <div id="auto-sched-empty" class="empty-state">
+                        <div class="empty-state-icon">🤖</div>
+                        <p>اضغط على "توليد الجدولة التلقائية" لبدء التحليل</p>
+                    </div>
+                    <div id="auto-sched-results-wrap" style="display: none; overflow-x: auto;">
+                        <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:center;">
+                            <button class="btn btn-secondary btn-sm" onclick="AutoScheduling.toggleGantt()" id="gantt-toggle-btn"
+                                style="background:rgba(52,152,219,0.12); border:1px solid rgba(52,152,219,0.4); color:var(--secondary); font-size:0.85rem;">
+                                📊 عرض المخطط الزمني
+                            </button>
+                            <button class="btn btn-sm" onclick="AutoScheduling.exportScheduleSimple()"
+                                style="background:rgba(39,174,96,0.12); border:1px solid rgba(39,174,96,0.5); color:#27ae60; font-size:0.85rem; border-radius:8px; padding:5px 14px; cursor:pointer; font-weight:600;">
+                                📥 تصدير Excel
+                            </button>
+                            <button class="btn btn-sm" onclick="AutoScheduling.printSchedule()"
+                                style="background:rgba(52,73,94,0.1); border:1px solid rgba(52,73,94,0.4); color:var(--text-primary); font-size:0.85rem; border-radius:8px; padding:5px 14px; cursor:pointer; font-weight:600;">
+                                🖨️ طباعة
+                            </button>
+                        </div>
+                        <div id="auto-sched-gantt-wrap" style="display:none; margin-bottom:18px; overflow-x:auto;
+                            border:1px solid var(--gray-light); border-radius:10px; padding:12px; background:var(--bg-primary);">
+                            <div id="auto-sched-gantt-inner"></div>
+                        </div>
+                        <table class="styled-report-table" id="auto-sched-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>اسم المشروع</th>
+                                    <th>نوع المشروع</th>
+                                    <th>المشرف المخصص</th>
+                                    <th>سبب الاختيار</th>
+                                    <th>تاريخ البدء</th>
+                                    <th>تاريخ الانتهاء</th>
+                                    <th>التخصيص الشهري</th>
+                                    <th>بدائل</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auto-sched-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═════ قسم جدولة المسارات (Stream-based) — مستقل، لا يحذف القسم القديم ═════ -->
+            <section id="stream-scheduling" class="section">
+                <div class="section-header">
+                    <h2>🌊 جدولة المسارات (Streams) — جغرافي/تيارات</h2>
+                    <p>محرك جدولة جديد قائم على تجميع المشاريع في تيارات تنفيذ جغرافية. مستقل تماماً عن المحرك الكلاسيكي.</p>
+                </div>
+
+                <div class="report-card" style="margin-bottom:18px;">
+                    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                        <h3 style="margin:0;">🔀 المحرك النشط</h3>
+                        <div class="engine-toggle">
+                            <button id="engine-btn-classic" onclick="StreamScheduling.setEngine('classic')">المحرك القديم (مهارات)</button>
+                            <button id="engine-btn-stream" class="active" onclick="StreamScheduling.setEngine('stream')">محرك Streams (جغرافي)</button>
+                        </div>
+                        <span id="engine-mode-hint" style="font-size:0.82rem; color:var(--text-secondary); margin-right:auto;">محرك Streams: تجميع المشاريع في تيارات تنفيذ جغرافية. المشرف يُستخرج من الـ stream لا يُختار مباشرة.</span>
+                    </div>
+                </div>
+
+                <div class="report-card" style="margin-bottom:18px;">
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
+                        <div>
+                            <label style="font-weight:700; display:block; margin-bottom:4px;">الجهة المنفذة:</label>
+                            <select id="stream-sched-branch-filter" style="min-width:180px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;">
+                                <option value="">جميع الفروع</option>
+                            </select>
+                        </div>
+                        <div style="position:relative;">
+                            <label style="font-weight:700; display:block; margin-bottom:4px;">رقم المشروع:</label>
+                            <input type="text" id="stream-sched-project-number-input" placeholder="أدخل رقم المشروع..." oninput="StreamScheduling.onProjectNumberInput(this.value)" autocomplete="off" style="width:220px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;">
+                            <div id="stream-sched-project-search-results"></div>
+                            <input type="hidden" id="stream-sched-type-filter" value="">
+                        </div>
+                        <button class="btn btn-primary" onclick="StreamScheduling.runStreamEngine()" style="padding:10px 22px;">⚡ توليد جدولة المسارات</button>
+                        <button class="btn btn-secondary" onclick="StreamScheduling.clearProjectFilter()" style="padding:10px 16px;" title="مسح فلتر رقم المشروع">✖ مسح المشروع</button>
+                        <button class="btn btn-success" onclick="AutoScheduling.pushToTimeline()">📥 إرسال إلى الخطة الزمنية</button>
+                    </div>
+                </div>
+
+                <div id="stream-engine-results" style="display:none;"></div>
+            </section>
+
+            <!-- ═════ قسم التوصيات الذكية الموحدة (Unified Smart Engine + What-If) ═════ -->
+            <section id="unified-recommendations" class="section">
+                <div class="section-header">
+                    <h2>🎯 التوصيات الذكية الموحدة</h2>
+                    <p>محرك تكامل ذكي يدمج بين <b>إدارة المواقع</b> + <b>وضع الجدولة</b> + <b>جدولة المسارات</b> ليعطيك لكل مشروع "لم يبدأ" توصية موحدة مع ٣ سيناريوهات بديلة ودرجة ثقة شاملة.</p>
+                </div>
+
+                <!-- شريط الفلاتر والإجراءات -->
+                <div class="report-card" style="margin-bottom:18px;">
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+                        <div>
+                            <label style="font-weight:700; display:block; margin-bottom:4px;">الجهة المنفذة:</label>
+                            <select id="unified-branch-filter" style="min-width:180px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;">
+                                <option value="">جميع الفروع</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-weight:700; display:block; margin-bottom:4px;">السيناريو المفضل:</label>
+                            <select id="unified-preferred-scenario" style="min-width:200px; padding:8px 12px; border:1px solid var(--gray-light); border-radius:8px;">
+                                <option value="auto">تلقائي (الأعلى ثقة)</option>
+                                <option value="stream">تفضيل الانضمام لمسار</option>
+                                <option value="solo_geo">تفضيل مشرف منفرد (جغرافي)</option>
+                                <option value="solo_classic">تفضيل مشرف منفرد (كلاسيكي)</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="UnifiedRecommendations.generate()" style="padding:10px 22px;">
+                            ⚡ توليد التوصيات الموحدة
+                        </button>
+                        <button class="btn btn-info" onclick="UnifiedRecommendations.runWhatIf()" style="padding:10px 18px; background:#8e44ad;">
+                            🔮 محاكاة What-If
+                        </button>
+                        <button class="btn btn-success" onclick="UnifiedRecommendations.exportToExcel()" style="padding:10px 18px;">
+                            📊 تصدير Excel
+                        </button>
+                        <button class="btn btn-warning" onclick="UnifiedRecommendations.applyAll()" style="padding:10px 18px;" title="تطبيق التوصية المختارة لكل مشروع وإرسالها للخطة الزمنية">
+                            ✅ تطبيق الكل
+                        </button>
+                    </div>
+                    <div style="margin-top:10px; font-size:0.82rem; color:var(--text-secondary);">
+                        💡 لكل مشروع نحسب ٣ سيناريوهات: <b>(1)</b> الانضمام لمسار قائم، <b>(2)</b> مشرف منفرد قريب جغرافياً، <b>(3)</b> مشرف منفرد بأقل حمل. يُختار الأعلى ثقة افتراضياً.
+                    </div>
+                </div>
+
+                <!-- KPIs ملخصة -->
+                <div id="unified-kpis" style="display:none;"></div>
+
+                <!-- نتائج المحاكاة What-If -->
+                <div id="unified-whatif-panel" style="display:none;"></div>
+
+                <!-- جدول التوصيات الموحد -->
+                <div id="unified-results" style="display:none;"></div>
+
+                <!-- حالة فارغة -->
+                <div id="unified-empty-state" class="report-card" style="text-align:center; padding:40px;">
+                    <div style="font-size:3rem; margin-bottom:12px;">🎯</div>
+                    <h3 style="margin:0 0 8px 0;">جاهز لتوليد التوصيات الذكية</h3>
+                    <p style="color:var(--text-secondary); margin:0;">اضغط <b>⚡ توليد التوصيات الموحدة</b> لرؤية ٣ سيناريوهات لكل مشروع لم يبدأ، مع المقارنة ودرجة الثقة.</p>
+                </div>
+            </section>
+        </main>
+
+        <div id="notification" class="notification"></div>
+        <div id="modal" class="modal"></div>
+        <div id="loading" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p>جاري التحميل...</p>
+        </div>
+    </div>
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    <script src="app.js"></script>
+</body>
+</html>
