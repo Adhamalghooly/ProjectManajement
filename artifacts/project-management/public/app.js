@@ -22,37 +22,55 @@ function saveExcelFile(wb, filename) {
     }
 }
 
-// تصحيح window.open على الجوال: إذا حُجب الـ popup، نستخدم iframe بدلاً من نافذة جديدة
+// تصحيح window.open: استخدام Blob URL لضمان عمل الطباعة داخل بيئة الـ iframe
 (function() {
     const _orig = window.open.bind(window);
     window.open = function(url, target, features) {
         // يستهدف فقط نوافذ الطباعة الداخلية (بدون URL)
         if (url === '' && target === '_blank') {
-            const win = _orig(url, target, features);
-            if (win) return win;
-            // Popup محجوب (جوال) → proxy يستخدم iframe
             let _html = '';
-            let _iframe = null;
             const proxy = {
+                _win: null,
+                _iframe: null,
                 document: {
                     write(html) { _html += html; },
                     close() {
-                        _iframe = document.getElementById('__print_iframe__');
-                        if (!_iframe) {
-                            _iframe = document.createElement('iframe');
-                            _iframe.id = '__print_iframe__';
-                            _iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
-                            document.body.appendChild(_iframe);
-                        }
+                        // الأسلوب الأول: Blob URL - يعمل داخل الـ iframe ويتجاوز قيود المتصفح
+                        try {
+                            const blob = new Blob([_html], { type: 'text/html;charset=utf-8' });
+                            const blobUrl = URL.createObjectURL(blob);
+                            const win = _orig(blobUrl, '_blank');
+                            if (win) {
+                                proxy._win = win;
+                                setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                                return;
+                            }
+                            URL.revokeObjectURL(blobUrl);
+                        } catch(e) {}
+                        // الأسلوب الثاني (احتياطي): iframe مرئي مع زر إغلاق
+                        let _iframe = document.getElementById('__print_iframe__');
+                        if (_iframe) _iframe.remove();
+                        _iframe = document.createElement('iframe');
+                        _iframe.id = '__print_iframe__';
+                        _iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99998;background:white;';
+                        document.body.appendChild(_iframe);
+                        proxy._iframe = _iframe;
+                        const closeBtn = document.createElement('button');
+                        closeBtn.textContent = '✕ إغلاق';
+                        closeBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:99999;padding:8px 18px;background:#ef4444;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-family:Cairo,Arial,sans-serif;font-weight:700;';
+                        closeBtn.onclick = () => { _iframe.remove(); closeBtn.remove(); };
+                        document.body.appendChild(closeBtn);
                         const doc = _iframe.contentWindow.document;
                         doc.open(); doc.write(_html); doc.close();
                     }
                 },
-                focus() {},
+                focus() { if (proxy._win) proxy._win.focus(); },
                 print() {
-                    setTimeout(() => {
-                        try { _iframe && _iframe.contentWindow.focus(); _iframe && _iframe.contentWindow.print(); } catch(e) {}
-                    }, 200);
+                    if (proxy._win) {
+                        setTimeout(() => { try { proxy._win.focus(); proxy._win.print(); } catch(e) {} }, 400);
+                    } else if (proxy._iframe) {
+                        setTimeout(() => { try { proxy._iframe.contentWindow.focus(); proxy._iframe.contentWindow.print(); } catch(e) {} }, 300);
+                    }
                 }
             };
             return proxy;
@@ -5995,7 +6013,7 @@ ${tableEl.outerHTML}
                 </p>
             </div>
             <div style="margin-bottom: 15px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                <button class="btn print-btn" onclick="window.print()">🖨️ طباعة</button>
+                <button class="btn print-btn" onclick="Reports.printReport()">🖨️ طباعة</button>
                 <button class="btn btn-success" onclick="Reports.exportOnTimeStartReportToExcel()">📊 تصدير Excel</button>
             </div>
 
