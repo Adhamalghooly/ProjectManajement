@@ -1,7 +1,22 @@
-// ===== دوال مساعدة لتوافق الجوال =====
+// ===== دوال مساعدة لتوافق الجوال والـ APK =====
 
-// تنزيل ملف Excel مباشرة (يعمل على الجوال بدون نافذة مشاركة)
+// ── تنزيل Excel: يعمل في المتصفح وفي Android WebView (APK) ──
 function saveExcelFile(wb, filename) {
+    // الطريقة 1: base64 data URI — تعمل في Android WebView
+    try {
+        const b64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+        const dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + b64;
+        const a = document.createElement('a');
+        a.href = dataUri;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { try { document.body.removeChild(a); } catch(e){} }, 300);
+        return;
+    } catch (e1) {}
+
+    // الطريقة 2: Blob + createObjectURL (متصفح سطح المكتب)
     try {
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -13,49 +28,105 @@ function saveExcelFile(wb, filename) {
         document.body.appendChild(a);
         a.click();
         setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch(e){}
         }, 300);
-    } catch (e) {
-        // fallback - استدعاء المكتبة الأصلية مباشرة
-        try { XLSX.writeFile(wb, filename); } catch(e2) {}
-    }
+        return;
+    } catch (e2) {}
+
+    // الطريقة 3: Fallback نهائي
+    try { XLSX.writeFile(wb, filename); } catch(e3) {}
 }
 
-// تصحيح window.open على الجوال: إذا حُجب الـ popup، نستخدم iframe بدلاً من نافذة جديدة
+// ── طباعة بـ overlay داخل الصفحة — تعمل في Android WebView (APK) وفي المتصفح ──
+// proxy يُحاكي واجهة window.open لكنه يعرض المحتوى في overlay داخل الصفحة
+function _createPrintProxy() {
+    let _html = '';
+    return {
+        document: {
+            write(html) { _html += html; },
+            close() {
+                // احذف overlay قديم إن وُجد
+                document.getElementById('__print_overlay__')?.remove();
+
+                const overlay = document.createElement('div');
+                overlay.id = '__print_overlay__';
+                overlay.style.cssText = [
+                    'position:fixed', 'inset:0', 'z-index:999999',
+                    'background:#fff', 'overflow:auto',
+                    'direction:rtl', 'font-family:Arial,sans-serif'
+                ].join(';');
+
+                // زر إغلاق (يختفي عند الطباعة)
+                overlay.innerHTML = `
+                    <div id="__print_bar__" style="
+                        position:sticky;top:0;z-index:10;
+                        background:#1e3a8a;color:#fff;
+                        padding:10px 16px;display:flex;gap:10px;align-items:center;
+                        font-family:Arial,sans-serif;
+                    ">
+                        <button onclick="window.print()" style="
+                            background:#fff;color:#1e3a8a;border:none;
+                            padding:8px 20px;border-radius:6px;font-weight:bold;
+                            font-size:14px;cursor:pointer;
+                        ">🖨️ طباعة</button>
+                        <button onclick="document.getElementById('__print_overlay__')?.remove()" style="
+                            background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.5);
+                            padding:8px 16px;border-radius:6px;font-size:14px;cursor:pointer;
+                        ">✕ إغلاق</button>
+                        <span style="font-size:13px;opacity:.85;">معاينة الطباعة</span>
+                    </div>
+                    <div id="__print_content__"></div>
+                `;
+
+                document.body.appendChild(overlay);
+
+                // أدخِل HTML للمحتوى
+                const contentDiv = overlay.querySelector('#__print_content__');
+                contentDiv.innerHTML = _html;
+
+                // أضف أنماط طباعة: أخفِ كل شيء إلا الـ overlay
+                let styleEl = document.getElementById('__print_style__');
+                if (!styleEl) {
+                    styleEl = document.createElement('style');
+                    styleEl.id = '__print_style__';
+                    document.head.appendChild(styleEl);
+                }
+                styleEl.textContent = `
+                    @media print {
+                        body > *:not(#__print_overlay__) { display: none !important; }
+                        #__print_overlay__ { position:static !important; overflow:visible !important; }
+                        #__print_bar__ { display: none !important; }
+                    }
+                `;
+            }
+        },
+        focus() {},
+        print() {
+            setTimeout(() => {
+                window.print();
+                // بعد الطباعة: احذف الـ overlay وأنماط الطباعة تلقائياً
+                setTimeout(() => {
+                    document.getElementById('__print_overlay__')?.remove();
+                    document.getElementById('__print_style__')?.remove();
+                }, 1000);
+            }, 350);
+        }
+    };
+}
+
+// استبدال window.open: دائماً استخدم proxy الطباعة الداخلي لنوافذ الطباعة
 (function() {
     const _orig = window.open.bind(window);
     window.open = function(url, target, features) {
-        // يستهدف فقط نوافذ الطباعة الداخلية (بدون URL)
+        // نوافذ الطباعة الداخلية فقط (بدون URL)
         if (url === '' && target === '_blank') {
-            const win = _orig(url, target, features);
-            if (win) return win;
-            // Popup محجوب (جوال) → proxy يستخدم iframe
-            let _html = '';
-            let _iframe = null;
-            const proxy = {
-                document: {
-                    write(html) { _html += html; },
-                    close() {
-                        _iframe = document.getElementById('__print_iframe__');
-                        if (!_iframe) {
-                            _iframe = document.createElement('iframe');
-                            _iframe.id = '__print_iframe__';
-                            _iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
-                            document.body.appendChild(_iframe);
-                        }
-                        const doc = _iframe.contentWindow.document;
-                        doc.open(); doc.write(_html); doc.close();
-                    }
-                },
-                focus() {},
-                print() {
-                    setTimeout(() => {
-                        try { _iframe && _iframe.contentWindow.focus(); _iframe && _iframe.contentWindow.print(); } catch(e) {}
-                    }, 200);
-                }
-            };
-            return proxy;
+            // حاول فتح نافذة حقيقية أولاً (متصفح سطح المكتب)
+            try {
+                const win = _orig(url, target, features);
+                if (win && !win.closed) return win;
+            } catch(e) {}
+            // إذا حُجب popup (APK / جوال) → استخدم overlay داخلي
+            return _createPrintProxy();
         }
         return _orig(url, target, features);
     };
