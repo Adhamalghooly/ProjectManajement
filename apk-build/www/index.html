@@ -4911,6 +4911,17 @@ function _createPrintProxy() {
     };
 }
 
+// ── دالة الطباعة المركزية: تستخدم AndroidPrint bridge أو window.print() ──
+function _doPrint(jobName) {
+    if (window.AndroidPrint && window.AndroidPrint.isAvailable && window.AndroidPrint.isAvailable()) {
+        // APK: استدعاء Android PrintManager مباشرة
+        window.AndroidPrint.print(jobName || 'تقرير المشاريع');
+    } else {
+        // متصفح: window.print() العادي
+        window.print();
+    }
+}
+
 // ── override window.open: توجيه نوافذ الطباعة للـ proxy الداخلي ──
 (function() {
     const _orig = window.open.bind(window);
