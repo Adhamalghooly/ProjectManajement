@@ -18723,35 +18723,39 @@ window.printMemo = printMemo;
 
 <script>
 // ================================================================
-// MOBILE / WEBVIEW COMPATIBILITY PATCH
-// Fixes: print popup windows + XLSX download + PDF download
-// Works transparently in both browser and Android WebView (APK)
+// CAPACITOR APK PATCH — Print & File Export
+// هذا الكود يعمل فقط داخل تطبيق APK (Capacitor)
+// في المتصفح العادي لا يؤثر على أي شيء — كل السلوك الأصلي محفوظ
 // ================================================================
 (function () {
     'use strict';
 
-    /* ── A. Print window patch ───────────────────────────────────
-       All print helpers do:
-         const pw = window.open('', '_blank');
-         pw.document.write(html);
-         pw.document.close();
-         setTimeout(() => pw.print(), N);
-       In WebView window.open returns null → crash.
-       We return a fake window whose .print() shows an in-app overlay.
-    ─────────────────────────────────────────────────────────────── */
+    // هل نحن داخل تطبيق Capacitor؟
+    function inAPK() {
+        return typeof window.Capacitor !== 'undefined' &&
+               typeof window.Capacitor.isNativePlatform === 'function' &&
+               window.Capacitor.isNativePlatform();
+    }
+
+    // ── 1. window.open('', ...) ← كل أزرار الطباعة تستخدمه ─────────
+    // في المتصفح: لا نغير شيئاً
+    // في APK: نمسك HTML المكتوب ثم نحفظه في Cache ونفتحه بـ Capacitor Browser
     const _origOpen = window.open.bind(window);
     window.open = function (url, target, features) {
-        const blank = !url || url === '' || url === 'about:blank';
-        if (blank) return _makeFakeWindow();
+        const isBlank = !url || url === '' || url === 'about:blank';
+        if (isBlank && inAPK()) {
+            return _makeCapacitorPrintWindow();
+        }
+        // المتصفح العادي: السلوك الأصلي بدون تغيير
         return _origOpen(url, target, features);
     };
 
-    function _makeFakeWindow() {
-        let _buf = '';
+    function _makeCapacitorPrintWindow() {
+        let _html = '';
         const fakeDoc = {
-            write(s)  { _buf += s; },
-            writeln(s){ _buf += s + '\n'; },
-            close()   { /* noop – we render on .print() */ },
+            write(s)   { _html += s; },
+            writeln(s) { _html += s + '\n'; },
+            close()    { /* content ready */ },
             get readyState() { return 'complete'; }
         };
         return {
@@ -18759,143 +18763,139 @@ window.printMemo = printMemo;
             location: { href: 'about:blank' },
             closed: false,
             focus() {},
-            close() { document.getElementById('__pm_print_overlay')?.remove(); },
-            print() { _showPrintOverlay(_buf); }
+            close() {},
+            print() { _capacitorOpenPrint(_html); }
         };
     }
 
-    function _showPrintOverlay(html) {
-        document.getElementById('__pm_print_overlay')?.remove();
-
-        const ov = document.createElement('div');
-        ov.id = '__pm_print_overlay';
-        ov.style.cssText =
-            'position:fixed;inset:0;z-index:2147483647;background:#fff;' +
-            'display:flex;flex-direction:column;font-family:Cairo,sans-serif;';
-
-        ov.innerHTML =
-            '<div id="__pm_tb" style="background:#1e3a8a;color:#fff;padding:12px 16px;' +
-            'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;">' +
-              '<span style="font-size:15px;font-weight:700;direction:rtl;">🖨️ معاينة التقرير</span>' +
-              '<div style="display:flex;gap:8px;">' +
-                '<button id="__pm_print_btn" style="background:#22c55e;border:0;color:#fff;' +
-                'padding:9px 18px;border-radius:7px;font-family:Cairo;font-size:13px;' +
-                'cursor:pointer;font-weight:700;">🖨️ طباعة / مشاركة</button>' +
-                '<button id="__pm_close_btn" style="background:#ef4444;border:0;color:#fff;' +
-                'padding:9px 14px;border-radius:7px;font-size:15px;cursor:pointer;font-weight:700;">✕</button>' +
-              '</div>' +
-            '</div>' +
-            '<iframe id="__pm_frame" style="flex:1;border:0;width:100%;background:#fff;"></iframe>';
-
-        document.body.appendChild(ov);
-
-        const frame = ov.querySelector('#__pm_frame');
+    async function _capacitorOpenPrint(html) {
         try {
-            frame.contentDocument.open();
-            frame.contentDocument.write(html);
-            frame.contentDocument.close();
+            const FS      = window.Capacitor.Plugins.Filesystem;
+            const Browser = window.Capacitor.Plugins.Browser;
+
+            // تحويل HTML إلى base64 مع دعم Unicode
+            const b64 = btoa(unescape(encodeURIComponent(html)));
+
+            const fname = 'print_' + Date.now() + '.html';
+            const result = await FS.writeFile({
+                path: fname,
+                data: b64,
+                directory: 'CACHE'
+            });
+
+            // فتح الملف في متصفح داخلي — يدعم الطباعة من قائمة المتصفح
+            await Browser.open({ url: result.uri, presentationStyle: 'fullscreen' });
+
         } catch (e) {
-            frame.srcdoc = html;
+            console.error('Capacitor print error:', e);
         }
-
-        ov.querySelector('#__pm_close_btn').onclick = () => ov.remove();
-
-        ov.querySelector('#__pm_print_btn').onclick = async function () {
-            // Web Share API → works on Android Chrome / WebView
-            if (typeof navigator.share === 'function') {
-                try {
-                    const blob = new Blob([html], { type: 'text/html' });
-                    const file = new File([blob], 'تقرير.html', { type: 'text/html' });
-                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                        await navigator.share({
-                            files: [file],
-                            title: 'تقرير – نظام تحليل بيانات المشاريع'
-                        });
-                        return;
-                    }
-                } catch (e) { /* cancelled or not supported */ }
-            }
-            // Fallback: print the iframe (works in desktop browser)
-            try { frame.contentWindow.print(); } catch (e) { window.print(); }
-        };
     }
 
-    /* ── B. XLSX / XLSXStyle writeFile patch ────────────────────
-       Replaces the internal download with a reliable Blob → <a> approach.
-       Applied immediately AND after DOMContentLoaded.
-    ─────────────────────────────────────────────────────────────── */
+    // ── 2. XLSX.writeFile / XLSXStyle.writeFile ─────────────────────
+    // في المتصفح: لا نغير شيئاً
+    // في APK: نحفظ في Cache ثم نفتح نافذة المشاركة الأندرويد
     function _patchXLSX(lib, name) {
-        if (!lib || lib.__pm_patched) return;
-        lib.__pm_patched = true;
-        lib.writeFile = function (wb, filename, opts) {
-            try {
-                const data = lib.write(wb, Object.assign({ bookType: 'xlsx', type: 'array' }, opts || {}));
-                const blob = new Blob([data], {
-                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                });
-                _blobDownload(blob, filename);
-            } catch (e) {
-                console.warn(name + ' writeFile (array) failed, trying base64:', e);
+        if (!lib || lib.__cap_patched) return;
+        lib.__cap_patched = true;
+
+        lib.writeFile = async function (wb, filename, opts) {
+            if (!inAPK()) {
+                // المتصفح العادي: استخدام آلية XLSX الأصلية عبر blob
                 try {
-                    const b64 = lib.write(wb, Object.assign({ bookType: 'xlsx', type: 'base64' }, opts || {}));
-                    const a = document.createElement('a');
-                    a.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + b64;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(() => a.remove(), 1000);
-                } catch (e2) {
-                    console.error(name + ' writeFile completely failed:', e2);
-                    typeof showNotification === 'function' && showNotification('تعذّر تصدير الملف', 'error');
-                }
+                    const data = lib.write(wb, Object.assign({ bookType: 'xlsx', type: 'array' }, opts || {}));
+                    const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const url  = URL.createObjectURL(blob);
+                    const a    = document.createElement('a');
+                    a.href = url; a.download = filename; a.style.display = 'none';
+                    document.body.appendChild(a); a.click();
+                    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 3000);
+                } catch (e) { console.error(name + ' browser writeFile error:', e); }
+                return;
+            }
+
+            // APK: Filesystem + Share
+            try {
+                const FS    = window.Capacitor.Plugins.Filesystem;
+                const Share = window.Capacitor.Plugins.Share;
+
+                const b64 = lib.write(wb, Object.assign({ bookType: 'xlsx', type: 'base64' }, opts || {}));
+
+                const result = await FS.writeFile({
+                    path: filename,
+                    data: b64,
+                    directory: 'CACHE'
+                });
+
+                await Share.share({
+                    title: filename,
+                    files: [result.uri],
+                    dialogTitle: 'حفظ / فتح ملف Excel'
+                });
+
+                typeof showNotification === 'function' &&
+                    showNotification('تم تصدير الملف بنجاح', 'success');
+
+            } catch (e) {
+                console.error(name + ' APK writeFile error:', e);
+                typeof showNotification === 'function' &&
+                    showNotification('تعذّر تصدير الملف', 'error');
             }
         };
     }
 
-    /* ── C. jsPDF save patch ─────────────────────────────────────
-       pdf.save(filename) internally does the same blob trick.
-       Patch the prototype so every instance benefits.
-    ─────────────────────────────────────────────────────────────── */
+    // ── 3. jsPDF.save ────────────────────────────────────────────────
+    // في المتصفح: لا نغير شيئاً
+    // في APK: Filesystem + Share
     function _patchJsPDF() {
         const jspdf = window.jspdf;
-        if (!jspdf || !jspdf.jsPDF || jspdf.jsPDF.prototype.__pm_patched) return;
-        jspdf.jsPDF.prototype.__pm_patched = true;
+        if (!jspdf || !jspdf.jsPDF || jspdf.jsPDF.prototype.__cap_patched) return;
+        jspdf.jsPDF.prototype.__cap_patched = true;
+
         const _origSave = jspdf.jsPDF.prototype.save;
-        jspdf.jsPDF.prototype.save = function (filename, options) {
+        jspdf.jsPDF.prototype.save = async function (filename, options) {
+            if (!inAPK()) {
+                return _origSave.call(this, filename, options);
+            }
+
             try {
-                const blob = this.output('blob');
-                _blobDownload(blob, filename || 'report.pdf');
+                const FS    = window.Capacitor.Plugins.Filesystem;
+                const Share = window.Capacitor.Plugins.Share;
+
+                const b64 = this.output('datauristring').split(',')[1];
+                const fname = filename || ('تقرير_' + Date.now() + '.pdf');
+
+                const result = await FS.writeFile({
+                    path: fname,
+                    data: b64,
+                    directory: 'CACHE'
+                });
+
+                await Share.share({
+                    title: fname,
+                    files: [result.uri],
+                    dialogTitle: 'حفظ / فتح ملف PDF'
+                });
+
             } catch (e) {
-                console.warn('jsPDF save fallback:', e);
-                try { _origSave.call(this, filename, options); } catch (e2) { /* ignore */ }
+                console.error('jsPDF APK save error:', e);
+                try { _origSave.call(this, filename, options); } catch (_) {}
             }
         };
     }
 
-    function _blobDownload(blob, filename) {
-        const url = URL.createObjectURL(blob);
-        const a   = document.createElement('a');
-        a.href        = url;
-        a.download    = filename;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 3000);
-    }
-
-    // Apply patches now (CDN libs already loaded) and again on DOMContentLoaded
-    function _applyAllPatches() {
+    // تطبيق الـ patches بعد تحميل المكتبات
+    function _applyPatches() {
         if (typeof XLSX      !== 'undefined') _patchXLSX(XLSX,      'XLSX');
         if (typeof XLSXStyle !== 'undefined') _patchXLSX(XLSXStyle, 'XLSXStyle');
         _patchJsPDF();
     }
 
-    _applyAllPatches();
-    document.addEventListener('DOMContentLoaded', _applyAllPatches);
+    _applyPatches();
+    document.addEventListener('DOMContentLoaded', _applyPatches);
 
 })();
 // ================================================================
-// END MOBILE / WEBVIEW COMPATIBILITY PATCH
+// END CAPACITOR APK PATCH
 // ================================================================
 
 function issueOfficialMemo() {
