@@ -1,3 +1,68 @@
+// ===== دوال مساعدة لتوافق الجوال =====
+
+// تنزيل ملف Excel مباشرة (يعمل على الجوال بدون نافذة مشاركة)
+function saveExcelFile(wb, filename) {
+    try {
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 300);
+    } catch (e) {
+        // fallback - استدعاء المكتبة الأصلية مباشرة
+        try { XLSX.writeFile(wb, filename); } catch(e2) {}
+    }
+}
+
+// تصحيح window.open على الجوال: إذا حُجب الـ popup، نستخدم iframe بدلاً من نافذة جديدة
+(function() {
+    const _orig = window.open.bind(window);
+    window.open = function(url, target, features) {
+        // يستهدف فقط نوافذ الطباعة الداخلية (بدون URL)
+        if (url === '' && target === '_blank') {
+            const win = _orig(url, target, features);
+            if (win) return win;
+            // Popup محجوب (جوال) → proxy يستخدم iframe
+            let _html = '';
+            let _iframe = null;
+            const proxy = {
+                document: {
+                    write(html) { _html += html; },
+                    close() {
+                        _iframe = document.getElementById('__print_iframe__');
+                        if (!_iframe) {
+                            _iframe = document.createElement('iframe');
+                            _iframe.id = '__print_iframe__';
+                            _iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
+                            document.body.appendChild(_iframe);
+                        }
+                        const doc = _iframe.contentWindow.document;
+                        doc.open(); doc.write(_html); doc.close();
+                    }
+                },
+                focus() {},
+                print() {
+                    setTimeout(() => {
+                        try { _iframe && _iframe.contentWindow.focus(); _iframe && _iframe.contentWindow.print(); } catch(e) {}
+                    }, 200);
+                }
+            };
+            return proxy;
+        }
+        return _orig(url, target, features);
+    };
+})();
+
+// ===== نهاية الدوال المساعدة =====
+
 let projectsDatabase = {
     metadata: {
         lastUpdate: new Date().toISOString(),
@@ -775,7 +840,7 @@ const StatsCenter = {
     exportToExcel() {
         const table = document.getElementById('stats-table');
         const wb = XLSX.utils.table_to_book(table, { sheet: "إحصائيات المشاريع" });
-        XLSX.writeFile(wb, `Stats_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+        saveExcelFile(wb, `Stats_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     },
 
     showCategoryDetails(category) {
@@ -1802,7 +1867,7 @@ function exportToExcel(data, filename) {
 
     const wb = lib.utils.book_new();
     lib.utils.book_append_sheet(wb, ws, 'البيانات');
-    lib.writeFile(wb, filename + '.xlsx');
+    saveExcelFile(wb, filename + '.xlsx');
 }
 
 
@@ -3116,7 +3181,7 @@ ${legendHtml}
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(rows);
         XLSX.utils.book_append_sheet(wb, ws, 'مصفوفة المؤشرات');
-        XLSX.writeFile(wb, `مصفوفة-مؤشرات-${period}.xlsx`);
+        saveExcelFile(wb, `مصفوفة-مؤشرات-${period}.xlsx`);
     },
 
 
@@ -3206,7 +3271,7 @@ tr:nth-child(even){background:#f9f9f9}
         );
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(projRows), 'المشاريع');
 
-        XLSX.writeFile(wb, `مؤشرات-${branch}-${period}.xlsx`);
+        saveExcelFile(wb, `مؤشرات-${branch}-${period}.xlsx`);
     },
 
     openMultiViewModal() {
@@ -3513,7 +3578,7 @@ ${tableEl.outerHTML}
         const ws = XLSX.utils.table_to_sheet(tableEl);
         XLSX.utils.book_append_sheet(wb, ws, 'مصفوفة المؤشرات');
         const fname = `مصفوفة-مؤشرات-${new Date().toLocaleDateString('en-GB').replace(/\//g,'-')}.xlsx`;
-        XLSX.writeFile(wb, fname);
+        saveExcelFile(wb, fname);
         showNotification('تم تصدير الجدول بنجاح', 'success');
     }
 };
@@ -3974,7 +4039,7 @@ ${tableEl.outerHTML}
             return;
         }
         const wb = XLSX.utils.table_to_book(table);
-        XLSX.writeFile(wb, `التقرير_الموحد_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.xlsx`);
+        saveExcelFile(wb, `التقرير_الموحد_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.xlsx`);
     },
 
     exportScheduledStatsToExcel() {
@@ -3992,7 +4057,7 @@ ${tableEl.outerHTML}
             const table = document.querySelector('.modal-content table');
             if (table) {
                 const wb = XLSX.utils.table_to_book(table);
-                XLSX.writeFile(wb, `مركز_الإحصائيات_المجدول_${date}.xlsx`);
+                saveExcelFile(wb, `مركز_الإحصائيات_المجدول_${date}.xlsx`);
                 showNotification('تم تصدير الملف بنجاح', 'success');
             } else {
                 showNotification('فشل في العثور على بيانات التقرير للتصدير', 'error');
@@ -6053,7 +6118,7 @@ ${tableEl.outerHTML}
             XLSX.utils.book_append_sheet(wb, ws, 'سنة ' + y);
         });
 
-        XLSX.writeFile(wb, 'نسبة_البدء_في_الموعد.xlsx');
+        saveExcelFile(wb, 'نسبة_البدء_في_الموعد.xlsx');
     },
 
     generateNotStartedProjectsReport() {
@@ -7188,7 +7253,7 @@ ${tableEl.outerHTML}
         
         // إنشاء اسم الملف مع اسم الجهة المنفذة
         const fileName = this.currentReportTitle.replace(/\s+/g, '_').replace(/[\/\\:*?"<>|]/g, '_');
-        XLSX.writeFile(wb, `${fileName}_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.xlsx`);
+        saveExcelFile(wb, `${fileName}_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.xlsx`);
         showNotification('تم تصدير التقرير كملف Excel بنجاح', 'success');
     },
     
@@ -12330,7 +12395,7 @@ const CriticalPath = {
             { wch: 20 }
         ];
         
-        XLSX.writeFile(wb, 'نموذج_بنود_المشروع.xlsx');
+        saveExcelFile(wb, 'نموذج_بنود_المشروع.xlsx');
         showNotification('تم تحميل نموذج Excel المطور', 'success');
     },
     
@@ -14547,7 +14612,7 @@ const TimelinePlan = {
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(sheetData);
         XLSX.utils.book_append_sheet(wb, ws, 'المشاريع الجارية');
-        XLSX.writeFile(wb, `مشاريع-جارية-مشرفون-${new Date().toISOString().split('T')[0]}.xlsx`);
+        saveExcelFile(wb, `مشاريع-جارية-مشرفون-${new Date().toISOString().split('T')[0]}.xlsx`);
     },
 
     // ---- طباعة جدولة المشاريع التي لم تبدأ ----
@@ -14623,7 +14688,7 @@ const TimelinePlan = {
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(sheetData);
         XLSX.utils.book_append_sheet(wb, ws, 'لم تبدأ');
-        XLSX.writeFile(wb, `جدولة-لم-تبدأ-${branch}-${today}.xlsx`);
+        saveExcelFile(wb, `جدولة-لم-تبدأ-${branch}-${today}.xlsx`);
     },
 
     updateNotifications() {
@@ -18041,7 +18106,7 @@ const AutoScheduling = {
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(sheetData);
         XLSX.utils.book_append_sheet(wb, ws, 'الجدولة التلقائية');
-        XLSX.writeFile(wb, `جدولة-تلقائية-${new Date().toISOString().split('T')[0]}.xlsx`);
+        saveExcelFile(wb, `جدولة-تلقائية-${new Date().toISOString().split('T')[0]}.xlsx`);
     },
 
     // --- تصدير Excel مبسط (بدون عمود البدائل) ---
@@ -18107,7 +18172,7 @@ const AutoScheduling = {
         ];
 
         XLSX.utils.book_append_sheet(wb, ws, 'الجدولة');
-        XLSX.writeFile(wb, `جدولة-${new Date().toISOString().split('T')[0]}.xlsx`);
+        saveExcelFile(wb, `جدولة-${new Date().toISOString().split('T')[0]}.xlsx`);
         showNotification('✅ تم تصدير الجدول بنجاح', 'success');
     },
 
@@ -21244,7 +21309,7 @@ const UnifiedRecommendations = {
         }
 
         const ts = new Date().toISOString().slice(0,10);
-        XLSX.writeFile(wb, `unified_recommendations_${ts}.xlsx`);
+        saveExcelFile(wb, `unified_recommendations_${ts}.xlsx`);
         if (typeof showNotification === 'function') showNotification('✅ تم تصدير الملف', 'success');
     }
 };
