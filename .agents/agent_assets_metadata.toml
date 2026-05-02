@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "_cInJQYLGokvHB8HU38NA"
+uri = "file://project-management-apk.zip"
+type = "unspecified"
+title = "نظام تحليل بيانات المشاريع - Android APK"
